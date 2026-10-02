@@ -4,13 +4,13 @@ import { issue, item } from '../lib/issues.js';
 import {
   loadAllProductsLight, loadProductsDetailed, isActive, ageDays, isCodeOnlyTitle,
   productTags, productAttributes, chartSizesFromHtml, offeredSizes, handleProblem,
-  normalizeProductType, canonicalTag, productCode,
+  normalizeProductType, canonicalTag, productCode, buildSeo, cleanHandle,
 } from '../lib/products.js';
 
 const cat = config.catalogue;
 
-const pItem = (p, detail = '') =>
-  item(p.id, `${productCode(p)} (${p.handle})`, { url: adminProductUrl(p.id), detail });
+const pItem = (p, detail = '', fix = '', where = '') =>
+  item(p.id, `${productCode(p)} (${p.handle})`, { url: adminProductUrl(p.id), detail, fix, where });
 
 export async function runCatalogue(ctx) {
   const all = await loadAllProductsLight();
@@ -34,7 +34,7 @@ export async function runCatalogue(ctx) {
       why: `Vendor is public (products.json, Google Shopping data, vendor filter pages). Currently: ${Object.entries(byVendor).map(([v, n]) => `${v} (${n})`).join(', ')}.`,
       fix: `Set Vendor to "${config.brand.vendor}". Keep supplier names in a private place (product metafield or tags in Odoo), not Vendor.`,
       autoFix: 'vendor',
-      items: badVendor.map((p) => pItem(p, `vendor: ${p.vendor}`)),
+      items: badVendor.map((p) => pItem(p, `Vendor shows "${p.vendor}"`, `Change Vendor from "${p.vendor}" to "${config.brand.vendor}"`)),
     }));
   }
 
@@ -45,9 +45,9 @@ export async function runCatalogue(ctx) {
     (v) => v.compareAtPrice && Number(v.compareAtPrice) <= Number(v.price),
   ));
   const basics = [
-    ...noImage.map((p) => pItem(p, 'no product image')),
-    ...zeroPrice.map((p) => pItem(p, 'a size has price 0')),
-    ...badCompare.map((p) => pItem(p, '"was" price is not higher than the sale price')),
+    ...noImage.map((p) => pItem(p, 'No product image', 'Upload product photos in the Media box', 'Product → Media')),
+    ...zeroPrice.map((p) => pItem(p, `Price is 0 on: ${(p.variants?.nodes || []).filter((v) => !Number(v.price)).map((v) => v.title).join(', ')}`, 'Set the correct selling price on those sizes', 'Product → Variants → Price')),
+    ...badCompare.map((p) => { const v = (p.variants?.nodes || []).find((x) => x.compareAtPrice && Number(x.compareAtPrice) <= Number(x.price)); return pItem(p, `Compare-at Rs ${Number(v.compareAtPrice)} is not above price Rs ${Number(v.price)}`, 'Raise Compare-at price above Price, or clear it if not on sale', 'Product → Variants → Compare-at price'); }),
   ];
   if (basics.length) {
     issues.push(issue({
@@ -62,7 +62,7 @@ export async function runCatalogue(ctx) {
   // 3. Negative stock (overselling)
   const negative = active.flatMap((p) => (p.variants?.nodes || [])
     .filter((v) => Number(v.inventoryQuantity) < 0)
-    .map((v) => item(v.id, `${productCode(p)} – ${v.title}`, { url: adminProductUrl(p.id), detail: `stock ${v.inventoryQuantity}` })));
+    .map((v) => item(v.id, `${productCode(p)} – size ${v.title}`, { url: adminProductUrl(p.id), detail: `Stock is ${v.inventoryQuantity}${v.inventoryPolicy === 'CONTINUE' ? ' · "Continue selling when out of stock" is ON' : ''}`, fix: `Count size ${v.title} and set the real quantity${v.inventoryPolicy === 'CONTINUE' ? '; untick "Continue selling when out of stock"' : ''}`, where: `Product → Variants → ${v.title} → Inventory` })));
   if (negative.length) {
     issues.push(issue({
       id: 'negative-stock', area: 'Inventory', severity: 'critical', owner: 'Inventory team',
@@ -82,7 +82,7 @@ export async function runCatalogue(ctx) {
       title: `${low.length} live products have ${cat.lowStockThreshold} or fewer pieces left`,
       why: 'Restock bestsellers or plan to remove these before they sell out.',
       fix: 'Review with the buying team.',
-      items: low.map((p) => pItem(p, `${p.totalInventory} left`)),
+      items: low.map((p) => pItem(p, `Only ${p.totalInventory} left in total`, 'Restock or plan to move to Sale')),
     }));
   }
 
@@ -93,7 +93,7 @@ export async function runCatalogue(ctx) {
     const offered = offeredSizes(p);
     if (!chart.length || !offered.length) continue;
     const missing = offered.filter((s) => !chart.includes(s));
-    if (missing.length) sizeIssues.push(pItem(p, `sells ${offered.join('/')} but chart only has ${chart.join('/')}`));
+    if (missing.length) sizeIssues.push(pItem(p, `Sells ${offered.join(' / ')} but the size chart only has ${chart.join(' / ')}`, `Add ${missing.join(' and ')} column${missing.length > 1 ? 's' : ''} to the size chart`, 'Product → Description → size chart table'));
   }
   if (sizeIssues.length) {
     issues.push(issue({
@@ -115,7 +115,7 @@ export async function runCatalogue(ctx) {
       why: 'Google shows "AC7764 – Aoun Collection". Nobody searches for that, so these pages get almost no free traffic.',
       fix: 'Run the "seo" fix: it writes a search title like "Black Embroidered Dhanak 2-Piece Suit | AC7764" from the product details (product title and code stay the same).',
       autoFix: 'seo',
-      items: noSeoTitle.map((p) => pItem(p)),
+      items: noSeoTitle.map((p) => { const seo = buildSeo(p); return pItem(p, `Google shows: "${p.title} – ${config.storeName}"`, seo ? `Set Page title to: "${seo.title}"` : 'Fill colour / fabric / work details first, then run the seo fix', 'Product → Search engine listing → Page title'); }),
     }));
   }
 
@@ -131,7 +131,7 @@ export async function runCatalogue(ctx) {
       why: 'Google currently shows "Product Details Bottom Style Straight Trouser Color Type…" under the result.',
       fix: 'Run the "seo" fix to write a short, readable description for each.',
       autoFix: 'seo',
-      items: weakMeta.map((p) => pItem(p)),
+      items: weakMeta.map((p) => { const seo = buildSeo(p); const d = (p.seo?.description || '').trim(); return pItem(p, d ? `Current: "${d.slice(0, 70)}…"` : 'Meta description is empty', seo ? `Set Meta description to: "${seo.description}"` : 'Write a 1–2 line description of the outfit', 'Product → Search engine listing → Meta description'); }),
     }));
   }
 
@@ -141,7 +141,7 @@ export async function runCatalogue(ctx) {
   for (const p of active) {
     const imgs = (p.media?.nodes || []).filter((m) => m.mediaContentType === 'IMAGE');
     const bad = imgs.filter((m) => !m.alt || m.alt.trim() === '' || m.alt.trim().toLowerCase() === p.title.trim().toLowerCase());
-    if (bad.length) altItems.push(pItem(p, `${bad.length}/${imgs.length} images without real alt text`));
+    if (bad.length) { const seo = buildSeo(p); altItems.push(pItem(p, `${bad.length} of ${imgs.length} images have ${bad.every((m) => !m.alt) ? 'no' : bad.every((m) => m.alt) ? 'only the code as' : 'missing or code-only'} alt text (image ${bad.map((m) => imgs.indexOf(m) + 1).join(', ')})`, `Set alt text like: "${seo ? `${seo.name} ${seo.attrs.code}` : productCode(p)} – front"`, 'Product → Media → click image → Add alt text')); }
     whatsappImages += imgs.filter((m) => /whatsapp|-wa\d+/i.test(m.image?.url || '')).length;
   }
   if (altItems.length) {
@@ -168,12 +168,12 @@ export async function runCatalogue(ctx) {
   const handleItems = active
     .map((p) => ({ p, problem: handleProblem(p.handle) }))
     .filter((x) => x.problem)
-    .map(({ p, problem }) => pItem(p, problem));
+    .map(({ p, problem }) => pItem(p, `URL: /products/${p.handle} (${problem})`, `Change URL handle to "${cleanHandle(p.handle)}" with redirect ticked`, 'Product → Search engine listing → URL handle'));
   const allCopyHandles = all.filter((p) => handleProblem(p.handle)).length;
   if (handleItems.length || allCopyHandles) {
     issues.push(issue({
       id: 'bad-handles', area: 'SEO', severity: handleItems.length ? 'warning' : 'info', owner: 'Developer',
-      title: `${handleItems.length} live product URLs are duplicates or have typos (${allCopyHandles} across the whole store)`,
+      title: `${handleItems.length} live product ${handleItems.length === 1 ? 'URL is a duplicate or has a typo' : 'URLs are duplicates or have typos'} (${allCopyHandles} across the whole store)`,
       why: 'URLs like ".../ac5533-copy-2" look untrustworthy and split Google ranking between copies.',
       fix: 'Run the "handles" fix: it renames to the clean URL and adds a redirect from the old one automatically.',
       autoFix: 'handles',
@@ -191,14 +191,14 @@ export async function runCatalogue(ctx) {
       title: `${dupTitles.length} live products share a title with another product`,
       why: 'Customers and staff cannot tell them apart; often one is an old copy that should be archived.',
       fix: 'Keep one, archive the duplicate (or rename if they are different colours).',
-      items: dupTitles.map((p) => pItem(p, `title "${p.title}"`)),
+      items: dupTitles.map((p) => pItem(p, `Same title "${p.title}" as another live product`, 'Archive the old copy, or add the colour to tell them apart', 'Product → Status (top right)')),
     }));
   }
 
   // 11. Product types inconsistent
   const typeItems = active
     .filter((p) => normalizeProductType(p.productType) !== p.productType || !cat.allowedProductTypes.includes(p.productType))
-    .map((p) => pItem(p, `"${p.productType || '(empty)'}" → "${normalizeProductType(p.productType) || '?'}"`));
+    .map((p) => pItem(p, `Type is "${p.productType || '(empty)'}"`, cat.allowedProductTypes.includes(normalizeProductType(p.productType)) ? `Change Type to "${normalizeProductType(p.productType)}"` : `Choose one of: ${cat.allowedProductTypes.join(', ')}`, 'Product → Product organization → Type'));
   if (typeItems.length) {
     issues.push(issue({
       id: 'product-types', area: 'Catalogue', severity: 'info', owner: 'Developer',
@@ -217,9 +217,9 @@ export async function runCatalogue(ctx) {
   for (const p of active) {
     const tags = productTags(p);
     const wrong = tags.filter((t) => canonicalTag(t) !== t);
-    if (wrong.length) tagItems.push(pItem(p, wrong.map((t) => `${t} → ${canonicalTag(t)}`).join(', ')));
+    if (wrong.length) tagItems.push(pItem(p, `Tag${wrong.length > 1 ? 's' : ''} spelled: ${wrong.map((t) => `"${t}"`).join(', ')}`, wrong.map((t) => `Replace "${t}" with "${canonicalTag(t)}"`).join('; '), 'Product → Product organization → Tags'));
     if (tags.some((t) => newTags.includes(t.toLowerCase())) && ageDays(p.createdAt) > cat.newArrivalMaxAgeDays) {
-      staleNew.push(pItem(p, `added ${Math.round(ageDays(p.createdAt))} days ago`));
+      staleNew.push(pItem(p, `Added ${Math.round(ageDays(p.createdAt))} days ago, still tagged "${tags.find((t) => newTags.includes(t.toLowerCase()))}"`, `Remove the "${tags.find((t) => newTags.includes(t.toLowerCase()))}" tag`, 'Product → Product organization → Tags'));
     }
   }
   if (tagItems.length) {
@@ -251,9 +251,9 @@ export async function runCatalogue(ctx) {
     const hasSummer = tags.includes('summer');
     const hasWinter = tags.includes('winter');
     const attrSeason = (productAttributes(p).season || '').toLowerCase();
-    if (hasSummer && hasWinter) seasonItems.push(pItem(p, 'tagged both Summer and Winter'));
-    else if (attrSeason.includes('winter') && hasSummer && !hasWinter) seasonItems.push(pItem(p, 'details say Winter wear but tagged Summer'));
-    else if (attrSeason.includes('summer') && hasWinter && !hasSummer) seasonItems.push(pItem(p, 'details say Summer wear but tagged Winter'));
+    if (hasSummer && hasWinter) seasonItems.push(pItem(p, 'Tagged both Summer and Winter', `Keep only the ${attrSeason.includes('summer') ? 'Summer' : attrSeason.includes('winter') ? 'Winter' : 'correct season'} tag`, 'Product → Tags'));
+    else if (attrSeason.includes('winter') && hasSummer && !hasWinter) seasonItems.push(pItem(p, 'Season detail says Winter, but tagged Summer', 'Replace tag "Summer" with "Winter"', 'Product → Tags'));
+    else if (attrSeason.includes('summer') && hasWinter && !hasSummer) seasonItems.push(pItem(p, 'Season detail says Summer, but tagged Winter', 'Replace tag "Winter" with "Summer"', 'Product → Tags'));
   }
   if (seasonItems.length) {
     issues.push(issue({
@@ -272,7 +272,7 @@ export async function runCatalogue(ctx) {
   const tests = all.filter((p) => /\btest\b/i.test(p.title));
   const oldDrafts = drafts.filter((p) => ageDays(p.createdAt) > cat.oldDraftDays);
   const clutter = [
-    ...tests.map((p) => pItem(p, `test product (${String(p.status).toLowerCase()})`)),
+    ...tests.map((p) => pItem(p, `Test product (${String(p.status).toLowerCase()})`, 'Delete this product', 'Product → bottom → Delete product')),
   ];
   if (tests.length || oldDrafts.length) {
     issues.push(issue({

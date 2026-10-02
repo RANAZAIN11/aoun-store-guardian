@@ -177,12 +177,12 @@ export async function runFrontend(ctx) {
       title: `${down.length} ${down.length === 1 ? 'page' : 'pages'} failed to load`,
       why: 'Customers hitting these pages see an error.',
       fix: 'Open each link. If it is a removed collection/product, update the menu or add a redirect.',
-      items: down.map((r) => item(r.url, r.label, { url: r.url, detail: r.error || `HTTP ${r.status}` })),
+      items: down.map((r) => item(r.url, r.label, { url: r.url, detail: `Page ${r.url.replace(base, '') || '/'} returned ${r.error || `HTTP ${r.status}`}`, fix: r.status === 404 ? 'Remove/replace this link in the menu, or add a URL redirect to a live page' : 'Open the page; if it keeps failing, tell the developer' })),
     }));
   }
 
   // 2. Broken images
-  const broken = ok.flatMap((r) => r.facts.brokenImages.map((src) => item(`${r.url}|${src}`, r.label, { url: r.url, detail: src.slice(0, 120) })));
+  const broken = ok.flatMap((r) => r.facts.brokenImages.map((src) => item(`${r.url}|${src}`, `${r.label} – broken image`, { url: r.url, detail: `Image file not loading: ${src.split('/').pop().split('?')[0].slice(0, 80)}`, fix: 'Re-upload this image in the section (or product Media) where it appears', where: `${r.label} page` })));
   if (broken.length) {
     issues.push(issue({
       id: 'broken-images', area: 'Storefront', severity: 'critical', owner: 'Content team',
@@ -194,8 +194,8 @@ export async function runFrontend(ctx) {
   }
 
   // 3. JS / console errors and failed requests
-  const jsItems = ok.flatMap((r) => [...new Set(r.consoleErrors)].slice(0, 5).map((e) => item(`${r.label}|${e}`, r.label, { url: r.url, detail: e })));
-  const reqItems = ok.flatMap((r) => r.failed.slice(0, 5).map((e) => item(`${r.label}|${e.replace(/\?.*$/, '')}`, r.label, { url: r.url, detail: e })));
+  const jsItems = ok.flatMap((r) => [...new Set(r.consoleErrors)].slice(0, 5).map((e) => item(`${r.label}|${e}`, `${r.label} – script error`, { url: r.url, detail: e, fix: 'Developer: find which theme file/app embed throws this and fix or remove it' })));
+  const reqItems = ok.flatMap((r) => r.failed.slice(0, 5).map((e) => item(`${r.label}|${e.replace(/\?.*$/, '')}`, `${r.label} – file failed to load`, { url: r.url, detail: e, fix: 'Remove the reference to this missing file (old app or deleted image)' })));
   if (jsItems.length || reqItems.length) {
     issues.push(issue({
       id: 'js-errors', area: 'Storefront', severity: 'warning', owner: 'Developer',
@@ -214,7 +214,7 @@ export async function runFrontend(ctx) {
       title: `${slow.length} pages are slow or heavy on mobile`,
       why: 'Most traffic is mobile data. Every extra second on a slow page loses buyers.',
       fix: 'Reduce autoplay videos and oversized images on the slow pages first.',
-      items: slow.map((r) => item(r.url, r.label, { url: r.url, detail: `${(r.loadMs / 1000).toFixed(1)}s · ${(r.facts.bytes / 1e6).toFixed(1)} MB` })),
+      items: slow.map((r) => item(r.url, r.label, { url: r.url, detail: `Took ${(r.loadMs / 1000).toFixed(1)}s and downloaded ${(r.facts.bytes / 1e6).toFixed(1)} MB on mobile`, fix: r.facts.autoplay > fe.maxAutoplayVideos ? `Turn off autoplay on ${r.facts.autoplay - fe.maxAutoplayVideos} of the ${r.facts.autoplay} videos` : 'Compress the biggest banners/images on this page' })),
     }));
   }
 
@@ -226,12 +226,12 @@ export async function runFrontend(ctx) {
       title: `Too many autoplay videos (${heavyVideo.map((r) => `${r.label}: ${r.facts.autoplay}`).join(', ')})`,
       why: `Each autoplay video downloads on page load. Recommended maximum: ${fe.maxAutoplayVideos} per page.`,
       fix: 'Keep 2–3 reels autoplaying; set the rest to play on tap (poster image only).',
-      items: heavyVideo.map((r) => item(r.url, r.label, { url: r.url, detail: `${r.facts.autoplay} autoplay videos` })),
+      items: heavyVideo.map((r) => item(r.url, r.label, { url: r.url, detail: `${r.facts.autoplay} videos start playing automatically`, fix: `Turn off Autoplay on ${r.facts.autoplay - fe.maxAutoplayVideos} of them (keep ${fe.maxAutoplayVideos})`, where: 'Theme editor → this page → video/reel blocks' })),
     }));
   }
 
   // 6. "View Product" links that open a raw video file
-  const videoLinks = ok.flatMap((r) => r.facts.videoLinks.map((l) => item(l.href, `${r.label} – "${l.text}"`, { url: r.url, detail: l.href })));
+  const videoLinks = ok.flatMap((r) => r.facts.videoLinks.map((l, n) => item(l.href, `${r.label} – reel ${n + 1} "${l.text}" button`, { url: r.url, detail: `Opens video file: …/${l.href.split('/').pop().split('?')[0].slice(0, 60)}`, fix: `In reel block ${n + 1}, pick the product shown in this video as the link`, where: 'Theme editor → Home page → reels section' })));
   if (videoLinks.length) {
     issues.push(issue({
       id: 'video-links', area: 'Storefront', severity: 'warning', owner: 'Content team',
@@ -245,7 +245,7 @@ export async function runFrontend(ctx) {
   // 7. Template placeholder text
   const placeholders = ok.flatMap((r) => fe.placeholderPhrases
     .filter((ph) => r.facts.text.toLowerCase().includes(ph.toLowerCase()))
-    .map((ph) => item(`${r.product ? 'product-template' : r.url}|${ph}`, r.label, { url: r.url, detail: `"${ph}"` })));
+    .map((ph) => item(`${r.product ? 'product-template' : r.url}|${ph}`, r.product ? 'Every product page' : r.label, { url: r.url, detail: `Demo text showing: "${ph}"`, fix: `Replace "${ph}" with real Aoun text, or hide that block`, where: r.product ? 'Theme editor → Products → Default product' : `Theme editor → ${r.label}` })));
   const uniquePlaceholders = [...new Map(placeholders.map((i) => [i.key, i])).values()];
   if (uniquePlaceholders.length) {
     issues.push(issue({
@@ -258,9 +258,18 @@ export async function runFrontend(ctx) {
   }
 
   // 8. Typos
+  const TYPO_FIX = { "the pakistan's": "Pakistan's", 'across the pakistan': 'across Pakistan', clearace: 'Clearance' };
   const typos = ok.flatMap((r) => fe.typoPhrases
     .filter((t) => `${r.facts.text} ${r.facts.metaDescription}`.toLowerCase().includes(t.toLowerCase()))
-    .map((t) => item(`${t}`, r.label, { url: r.url, detail: `"${t}"` })));
+    .map((t) => {
+      const inMeta = r.facts.metaDescription.toLowerCase().includes(t.toLowerCase());
+      return item(`${t}`, r.label, {
+        url: r.url,
+        detail: `Text "${t}" found ${inMeta ? 'in the Google description' : 'on the page'}`,
+        fix: TYPO_FIX[t.toLowerCase()] ? `Change "${t}" to "${TYPO_FIX[t.toLowerCase()]}"` : `Correct "${t}"`,
+        where: inMeta ? 'Online Store → Preferences → Homepage meta description' : `Theme editor / page content → ${r.label}`,
+      });
+    }));
   const uniqueTypos = [...new Map(typos.map((i) => [i.key, i])).values()];
   if (uniqueTypos.length) {
     issues.push(issue({
@@ -282,7 +291,7 @@ export async function runFrontend(ctx) {
       title: `Announcement bar still talks about ${oppositeSeason(season)} — it is ${season} season`,
       why: 'The first line every visitor reads is out of date.',
       fix: 'Theme editor → Announcement bar: update the message.',
-      items: [item('announcement', 'Announcement bar', { url: offSeason.url, detail: offSeason.facts.announcement.slice(0, 140) })],
+      items: [item('announcement', 'Announcement bar (top of every page)', { url: offSeason.url, detail: `Says: "${offSeason.facts.announcement.slice(0, 120)}"`, fix: `Replace the ${oppositeSeason(season)} message with a ${season} one, e.g. "New ${season === 'winter' ? 'Winter' : 'Summer'} Collection Live Now"`, where: 'Theme editor → Header → Announcement bar' })],
     }));
   }
 
@@ -295,7 +304,7 @@ export async function runFrontend(ctx) {
       title: `"${viewerValues[0]} people are viewing this right now" shows the same number on every product`,
       why: 'Shoppers who compare two products notice instantly; a fake counter makes every other claim on the page less believable.',
       fix: 'Remove the block in the product template, or replace it with a real signal (e.g. actual stock left).',
-      items: productPages.map((r) => item(r.url, r.label, { url: r.url, detail: `${r.facts.viewers} viewing` })),
+      items: productPages.map((r) => item(r.url, r.label, { url: r.url, detail: `Shows "${r.facts.viewers} people are viewing"`, fix: 'Hide the "people viewing" block in the product template (one change fixes all products)', where: 'Theme editor → Products → Default product' })),
     }));
   }
 
@@ -306,7 +315,7 @@ export async function runFrontend(ctx) {
     const chart = r.facts.chart.map((c) => normalizeSize(c)).filter((c) => /^(XXS|XS|S|M|L|XL|XXL|XXXL)$/.test(c));
     if (!offered.length || !chart.length) continue;
     const missing = offered.filter((s) => !chart.includes(s));
-    if (missing.length) sizeGaps.push(item(r.url, r.label, { url: r.url, detail: `sells ${offered.join('/')} · chart shows ${[...new Set(chart)].join('/')}` }));
+    if (missing.length) sizeGaps.push(item(r.url, r.label, { url: r.url, detail: `Sells ${offered.join(' / ')} but chart shows only ${[...new Set(chart)].join(' / ')}`, fix: `Add ${missing.join(' and ')} to the size chart` }));
   }
   // Skip when the catalogue check already reported the same root cause from the product data.
   const alreadyReported = (ctx.issues || []).some((i) => i.id === 'size-chart-gap');
@@ -332,7 +341,7 @@ export async function runFrontend(ctx) {
         title: `Footer has ${dups.length} link ${dups.length === 1 ? 'name' : 'names'} used for two different pages`,
         why: `e.g. "${dups[0][0]}" opens: ${[...dups[0][1]].map((h) => h.replace(base, '')).join(' and ')}.`,
         fix: 'Online Store → Navigation → Footer menu: rename the second link (e.g. "Privacy Policy").',
-        items: dups.map(([label, hrefs]) => item(label, label, { url: base, detail: [...hrefs].join(' | ') })),
+        items: dups.map(([label, hrefs]) => item(label, `Footer link "${label}"`, { url: base, detail: `Used for ${[...hrefs].map((h) => h.replace(base, '')).join(' AND ')}`, fix: `Rename the link that opens ${[...hrefs][1].replace(base, '')} to match that page (e.g. "${/privacy/i.test([...hrefs][1]) ? 'Privacy Policy' : 'correct page name'}")`, where: 'Content → Menus → Footer menu' })),
       }));
     }
 
@@ -345,7 +354,7 @@ export async function runFrontend(ctx) {
         title: 'Footer Instagram link goes to a different account',
         why: `Links to ${ig.href.replace(/\?.*$/, '')} but the active account is @${want}.`,
         fix: 'Theme settings → Social media: update the Instagram URL.',
-        items: [item('instagram', 'Instagram', { url: ig.href, detail: ig.href })],
+        items: [item('instagram', 'Footer Instagram icon', { url: ig.href, detail: `Links to ${ig.href.replace(/\?.*$/, '')}`, fix: `Change it to https://www.instagram.com/${want}/`, where: 'Theme editor → Theme settings → Social media' })],
       }));
     }
 
@@ -356,7 +365,7 @@ export async function runFrontend(ctx) {
         title: 'Share image (og:image) uses http instead of https',
         why: 'Some apps (WhatsApp, Facebook) skip non-https preview images, so shared links show no picture.',
         fix: 'In theme.liquid / meta-tags snippet use `| image_url` with `https:` prefix instead of `http:`.',
-        items: [item('og', 'og:image', { url: base, detail: home.facts.ogImage })],
+        items: [item('og', 'Share preview image (og:image)', { url: base, detail: `Uses ${home.facts.ogImage.slice(0, 90)}`, fix: 'Change "http:" to "https:" in the og:image tag', where: 'Theme code → theme.liquid / meta-tags snippet' })],
       }));
     }
   }

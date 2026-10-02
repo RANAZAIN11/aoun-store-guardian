@@ -71,6 +71,16 @@ try {
   check('KPIs filled', () => assert.ok(rep.kpis.ordersPeriod === 40 && rep.kpis.activeProducts === 4 && rep.kpis.cancelRate));
   const html = readFileSync(path.join(reportsDir, 'report.html'), 'utf8');
   check('HTML report has sections + KPIs', () => assert.ok(html.includes('FIX TODAY') && html.includes('ORDERS YESTERDAY') && html.includes('HEALTH')));
+  check('every issue has a WHERE and numbered steps', () => {
+    const missing = rep.issues.filter((i) => !i.where || !(i.steps || []).length).map((i) => i.id);
+    assert.deepEqual(missing, []);
+  });
+  check('every flagged item explains what is wrong and its own fix', () => {
+    const bad = rep.issues.flatMap((i) => i.items.filter((x) => !x.detail || !x.fix).map((x) => `${i.id}:${x.label}`));
+    assert.deepEqual(bad, []);
+  });
+  check('SEO item suggests the exact title', () => assert.ok(rep.issues.find((i) => i.id === 'code-only-titles').items.some((x) => x.fix.includes('Black Embroidered Dhanak 2-Piece Suit | AC7764'))));
+  check('downloadable HTML is self-contained (screenshot embedded)', () => assert.ok(html.includes('data:image/jpeg;base64,') && html.includes('FLAGGED') && html.includes('HOW TO FIX')));
   check('CSV written', () => assert.ok(readFileSync(path.join(reportsDir, 'issues.csv'), 'utf8').split('\n').length > 20));
 
   console.log('\n2) Daily report (second run → nothing should be "new")');

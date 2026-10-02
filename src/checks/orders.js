@@ -77,7 +77,9 @@ export async function runOrders(ctx) {
       fix: 'Dispatch today, or call the customer and cancel/refund if the item is not available.',
       items: stuck.map((x) => item(x.id, x.name, {
         url: adminOrderUrl(x.id),
-        detail: `${Math.floor((Date.now() - new Date(x.createdAt).getTime()) / 864e5)} days old · ${x.displayFulfillmentStatus.toLowerCase().replace(/_/g, ' ')} · ${money(amount(x))}`,
+        detail: `Placed ${Math.floor((Date.now() - new Date(x.createdAt).getTime()) / 864e5)} days ago · ${x.displayFulfillmentStatus.toLowerCase().replace(/_/g, ' ')} · ${money(amount(x))} · ${(x.paymentGatewayNames || []).join(', ') || 'payment n/a'}`,
+        fix: 'Dispatch today, or confirm with the customer and cancel',
+        where: 'Orders → this order',
       })),
     }));
   }

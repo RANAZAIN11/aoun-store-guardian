@@ -153,27 +153,42 @@ function issueCard(iss, max) {
     ? pill('NEW', '#ffffff', '#2f5bd3')
     : iss.newCount ? pill(`+${iss.newCount} new`, '#2f5bd3', '#e6edff') : '';
   const fixUrl = fixWorkflowUrl();
+  const label = (t) => `<td valign="top" style="width:86px;padding:5px 8px 4px 0;font:600 10px ${FONT};color:${C.muted};letter-spacing:.08em;white-space:nowrap;">${t}</td>`;
+
+  const steps = (iss.steps || []).length ? `
+<tr>${label('HOW TO FIX')}<td style="padding:4px 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${iss.steps.map((st, n) => `
+    <tr><td valign="top" style="width:20px;padding:2px 0;"><span style="display:inline-block;width:16px;height:16px;line-height:16px;border-radius:50%;background:${C.black};color:#fff;font:700 9px ${FONT};text-align:center;">${n + 1}</span></td>
+    <td style="padding:2px 0 4px;font:400 13px/1.5 ${FONT};color:${C.ink};">${esc(st)}</td></tr>`).join('')}
+  </table></td></tr>` : '';
 
   const rows = shown.map((i, n) => `
-<tr><td style="padding:9px 0;border-top:${n ? `1px solid ${C.line}` : 'none'};">
+<tr><td style="padding:11px 0;border-top:${n ? `1px solid ${C.line}` : 'none'};">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-    <td valign="middle" style="font:600 13px ${FONT};color:${C.ink};word-break:break-word;">
+    <td valign="top" style="font:700 13px ${FONT};color:${C.ink};word-break:break-word;">
       ${i.isNew && !iss.isNew ? `<span style="color:#2f5bd3;font-size:10px;letter-spacing:.08em;">NEW&nbsp;</span>` : ''}${esc(i.label)}
-      ${i.detail ? `<div style="font:400 12px ${FONT};color:${C.muted};margin-top:2px;">${esc(i.detail)}</div>` : ''}
     </td>
-    ${i.url ? `<td valign="middle" align="right" style="padding-left:10px;white-space:nowrap;"><a href="${esc(i.url)}" style="font:600 12px ${FONT};color:${C.ink};text-decoration:none;border:1px solid ${C.line};border-radius:999px;padding:5px 11px;display:inline-block;">Open&nbsp;›</a></td>` : ''}
+    ${i.url ? `<td valign="top" align="right" style="padding-left:10px;white-space:nowrap;"><a href="${esc(i.url)}" style="font:600 12px ${FONT};color:${C.ink};text-decoration:none;border:1px solid ${C.line};border-radius:999px;padding:5px 11px;display:inline-block;">Open&nbsp;›</a></td>` : ''}
   </tr></table>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;">
+    ${i.detail ? `<tr><td valign="top" style="width:58px;padding:2px 0;font:700 10px ${FONT};color:#b42318;letter-spacing:.06em;">FLAGGED</td><td style="padding:2px 0;font:400 12px/1.5 ${FONT};color:${C.body};word-break:break-word;">${esc(i.detail)}</td></tr>` : ''}
+    ${i.where ? `<tr><td valign="top" style="width:58px;padding:2px 0;font:700 10px ${FONT};color:${C.muted};letter-spacing:.06em;">WHERE</td><td style="padding:2px 0;font:400 12px/1.5 ${FONT};color:${C.body};">${esc(i.where)}</td></tr>` : ''}
+    ${i.fix ? `<tr><td valign="top" style="width:58px;padding:2px 0;font:700 10px ${FONT};color:#1f7a4d;letter-spacing:.06em;">FIX</td><td style="padding:2px 0;font:600 12px/1.5 ${FONT};color:#1f5c3d;word-break:break-word;">${esc(i.fix)}</td></tr>` : ''}
+  </table>
 </td></tr>`).join('');
 
   const itemsBlock = shown.length ? `
-<tr><td style="padding:6px 20px 4px;">
+<tr><td style="padding:12px 20px 0;">
+  <div style="font:600 10px ${FONT};color:${C.muted};letter-spacing:.14em;border-top:1px solid ${C.line};padding-top:12px;">WHAT IS FLAGGED (${iss.items.length})</div>
+</td></tr>
+<tr><td style="padding:2px 20px 4px;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}
-  ${more > 0 ? `<tr><td style="padding:8px 0 4px;border-top:1px solid ${C.line};font:400 12px ${FONT};color:${C.muted};">+ ${more} more in the attached spreadsheet</td></tr>` : ''}
+  ${more > 0 ? `<tr><td style="padding:8px 0 4px;border-top:1px solid ${C.line};font:400 12px ${FONT};color:${C.muted};">+ ${more} more — full list with fixes in the attached report and spreadsheet</td></tr>` : ''}
   </table>
 </td></tr>` : '';
 
   const autoFix = iss.autoFix ? `
-<tr><td style="padding:6px 20px 0;">
+<tr><td style="padding:8px 20px 0;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f5f3;border-radius:8px;"><tr>
     <td style="padding:10px 12px;font:400 12px ${FONT};color:${C.body};">⚡ One-click fix available: <b>${esc(iss.autoFix)}</b> (preview first)</td>
     ${fixUrl ? `<td align="right" style="padding:8px 10px;"><a href="${fixUrl}" style="font:600 12px ${FONT};color:#ffffff;background:${C.black};text-decoration:none;border-radius:999px;padding:7px 13px;display:inline-block;white-space:nowrap;">Run fix&nbsp;›</a></td>` : ''}
@@ -189,10 +204,9 @@ function issueCard(iss, max) {
 </td></tr>
 <tr><td style="padding:8px 20px 0;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-    <tr><td valign="top" style="width:86px;padding:5px 8px 4px 0;font:600 10px ${FONT};color:${C.muted};letter-spacing:.08em;white-space:nowrap;">WHY</td>
-        <td style="padding:4px 0;font:400 13px/1.55 ${FONT};color:${C.body};">${esc(iss.why)}</td></tr>
-    <tr><td valign="top" style="width:86px;padding:5px 8px 4px 0;font:600 10px ${FONT};color:${C.muted};letter-spacing:.08em;white-space:nowrap;">HOW TO FIX</td>
-        <td style="padding:4px 0;font:400 13px/1.55 ${FONT};color:${C.ink};">${esc(iss.fix)}</td></tr>
+    <tr>${label('WHY')}<td style="padding:4px 0;font:400 13px/1.55 ${FONT};color:${C.body};">${esc(iss.why)}</td></tr>
+    ${iss.where ? `<tr>${label('WHERE')}<td style="padding:4px 0;font:600 13px/1.55 ${FONT};color:${C.ink};">${esc(iss.where)}</td></tr>` : ''}
+    ${steps}
   </table>
 </td></tr>
 ${autoFix}
@@ -201,18 +215,18 @@ ${itemsBlock}
 </table></td></tr>`;
 }
 
-function screenshotBlock(hasScreenshot) {
+function screenshotBlock(hasScreenshot, imageSrc) {
   if (!hasScreenshot) return '';
   return `${sectionTitle('Homepage this morning', 'How the site looked on a phone at the time of the check')}
 <tr><td align="center" style="padding:4px 28px 6px;">
   <table role="presentation" cellpadding="0" cellspacing="0" style="background:${C.black};border-radius:22px;"><tr>
-    <td style="padding:10px;"><img src="cid:homepage-mobile" width="240" alt="Homepage on mobile" style="display:block;width:240px;max-width:100%;border-radius:14px;border:0;"></td>
+    <td style="padding:10px;"><img src="${imageSrc}" width="240" alt="Homepage on mobile" style="display:block;width:240px;max-width:100%;border-radius:14px;border:0;"></td>
   </tr></table>
 </td></tr>`;
 }
 
-export function buildHtml({ issues, kpis, notes, brief, history, date, durationSec, hasScreenshot = false }) {
-  const max = config.report.maxItemsPerIssue;
+export function buildHtml({ issues, kpis, notes, brief, history, date, durationSec, hasScreenshot = false, full = false, imageSrc = 'cid:homepage-mobile' }) {
+  const max = full ? Infinity : config.report.maxItemsPerIssue;
   const counts = { critical: 0, warning: 0, info: 0 };
   issues.forEach((i) => { counts[i.severity]++; });
   const score = healthScore(issues);
@@ -239,14 +253,14 @@ ${prioritiesCard(brief, issues)}
 ${resolvedCard(history.resolved)}
 ${kpiGrid(kpis)}
 ${issues.length ? sections : ''}
-${screenshotBlock(hasScreenshot)}
+${screenshotBlock(hasScreenshot, imageSrc)}
 ${notes.length ? `<tr><td style="padding:18px 28px 0;font:400 12px/1.6 ${FONT};color:${C.muted};"><b>Notes:</b> ${notes.map(esc).join(' · ')}</td></tr>` : ''}
 <tr><td style="padding:26px 0 0;"></td></tr>
 <tr><td style="background:${C.black};padding:22px 28px;border-radius:0 0 14px 14px;">
   <div style="font:400 15px ${SERIF};color:#ffffff;">Aoun Collection</div>
   <div style="font:400 12px/1.7 ${FONT};color:#b9b4ad;margin-top:6px;">
     Automatic check · every day at 10:00 AM (PKT) · took ${durationSec}s${brief ? ` · priorities by ${esc(brief.model)}` : ''}<br>
-    Full list of every item is in the attached spreadsheet.
+    ${full ? 'Full report — every flagged item with its fix.' : 'Download the attached report (HTML) for every item with its fix, or the spreadsheet for Excel.'}
     ${run ? `<br><a href="${run}" style="color:${C.gold};text-decoration:none;">View run log ›</a>` : ''}
     ${fixWorkflowUrl() ? `&nbsp;&nbsp;<a href="${fixWorkflowUrl()}" style="color:${C.gold};text-decoration:none;">Run a fix ›</a>` : ''}
   </div>
@@ -259,11 +273,11 @@ ${notes.length ? `<tr><td style="padding:18px 28px 0;font:400 12px/1.6 ${FONT};c
 
 export function buildCsv(issues) {
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = [['severity', 'area', 'owner', 'issue', 'item', 'detail', 'link', 'new'].map(q).join(',')];
+  const rows = [['severity', 'area', 'owner', 'issue', 'item', 'what is flagged', 'where', 'fix', 'link', 'new'].map(q).join(',')];
   for (const iss of issues) {
-    if (!iss.items.length) rows.push([iss.severity, iss.area, iss.owner, iss.title, '', '', '', iss.isNew ? 'yes' : ''].map(q).join(','));
+    if (!iss.items.length) rows.push([iss.severity, iss.area, iss.owner, iss.title, '', iss.why, iss.where, (iss.steps || []).join(' / '), '', iss.isNew ? 'yes' : ''].map(q).join(','));
     for (const i of iss.items) {
-      rows.push([iss.severity, iss.area, iss.owner, iss.title, i.label, i.detail, i.url || '', i.isNew ? 'yes' : ''].map(q).join(','));
+      rows.push([iss.severity, iss.area, iss.owner, iss.title, i.label, i.detail, i.where || iss.where, i.fix || (iss.steps || []).join(' / '), i.url || '', i.isNew ? 'yes' : ''].map(q).join(','));
     }
   }
   return `\uFEFF${rows.join('\n')}`; // BOM so Excel opens Urdu/emoji text correctly
