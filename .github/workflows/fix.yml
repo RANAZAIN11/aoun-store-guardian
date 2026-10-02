@@ -1,0 +1,86 @@
+name: Fix store issues
+
+# Run by hand from the Actions tab. Always run once with "apply" OFF (preview),
+# check the table in the run summary, then run again with "apply" ON.
+
+on:
+  workflow_dispatch:
+    inputs:
+      fix:
+        description: "Which fix to run"
+        required: true
+        type: choice
+        options:
+          - vendor
+          - seo
+          - alt-text
+          - types-tags
+          - handles
+      apply:
+        description: "Apply changes to the live store (leave OFF to preview only)"
+        type: boolean
+        default: false
+      include_drafts:
+        description: "Also fix draft products (default: live products only)"
+        type: boolean
+        default: false
+      expire_new_arrivals:
+        description: "types-tags only: remove 'New Arrival' from products older than the new-arrival window"
+        type: boolean
+        default: false
+      limit:
+        description: "Max number of changes (blank = all). Tip: try 5 first."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: store-fix
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies (no browser needed)
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Run fix
+        env:
+          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+          SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+          FIX: ${{ inputs.fix }}
+          APPLY: ${{ inputs.apply }}
+          DRAFTS: ${{ inputs.include_drafts }}
+          EXPIRE: ${{ inputs.expire_new_arrivals }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          ARGS=("$FIX")
+          [ "$APPLY" = "true" ] && ARGS+=("--apply")
+          [ "$DRAFTS" = "true" ] && ARGS+=("--all-statuses")
+          [ "$EXPIRE" = "true" ] && ARGS+=("--expire-new-arrivals")
+          if [[ "$LIMIT" =~ ^[0-9]+$ ]]; then ARGS+=("--limit=$LIMIT"); fi
+          node src/fixes/run.js "${ARGS[@]}"
+
+      - name: Save plan / results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fix-${{ inputs.fix }}-${{ github.run_number }}
+          path: reports/fix-*.csv
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,0 +1,21 @@
+{
+  "name": "aoun-store-guardian",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Daily 10am health report for the Aoun Collection Shopify store: storefront checks, catalogue audit, order watchdog, and safe dry-run fix scripts.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "report": "node src/index.js",
+    "report:local": "node src/index.js --no-email",
+    "fix": "node src/fixes/run.js",
+    "test:smoke": "node test/smoke.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "nodemailer": "^6.9.15",
+    "playwright": "1.56.0"
+  }
+}

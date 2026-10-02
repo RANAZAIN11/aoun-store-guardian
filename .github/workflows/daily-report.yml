@@ -1,0 +1,70 @@
+name: Daily store report (10am PKT)
+
+on:
+  schedule:
+    # 10:00 AM Pakistan time (PKT = UTC+5) -> 05:00 UTC.
+    # GitHub can start scheduled runs 5–20 minutes late when it is busy.
+    - cron: "0 5 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install browser (Chromium)
+        run: npx playwright install --with-deps chromium
+
+      # Restores yesterday's results so the email can mark what is NEW today.
+      - name: Restore report history
+        uses: actions/cache@v4
+        with:
+          path: reports/history
+          key: report-history-${{ github.run_id }}
+          restore-keys: report-history-
+
+      - name: Run checks and email the report
+        env:
+          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+          SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_CC: ${{ secrets.MAIL_CC }}
+        run: npm run report
+
+      - name: Save report files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-report-${{ github.run_number }}
+          path: |
+            reports/report.html
+            reports/issues.csv
+            reports/report.json
+            reports/homepage-mobile.jpg
+          if-no-files-found: ignore
+          retention-days: 30
