@@ -70,7 +70,7 @@ try {
   check('vendor issue lists the two supplier products', () => assert.equal(rep.issues.find((i) => i.id === 'supplier-vendor').items.length, 2));
   check('KPIs filled', () => assert.ok(rep.kpis.ordersPeriod === 40 && rep.kpis.activeProducts === 4 && rep.kpis.cancelRate));
   const html = readFileSync(path.join(reportsDir, 'report.html'), 'utf8');
-  check('HTML report has sections + KPIs', () => assert.ok(html.includes('Fix today') && html.includes('Orders yesterday')));
+  check('HTML report has sections + KPIs', () => assert.ok(html.includes('FIX TODAY') && html.includes('ORDERS YESTERDAY') && html.includes('HEALTH')));
   check('CSV written', () => assert.ok(readFileSync(path.join(reportsDir, 'issues.csv'), 'utf8').split('\n').length > 20));
 
   console.log('\n2) Daily report (second run → nothing should be "new")');

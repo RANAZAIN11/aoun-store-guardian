@@ -67,13 +67,14 @@ async function main() {
   const brief = await aiBrief(issues, ctx.kpis, ctx.screenshot);
   const durationSec = Math.round((Date.now() - started) / 1000);
 
-  const html = buildHtml({ issues, kpis: ctx.kpis, notes: ctx.notes, brief, history, date, durationSec });
+  const html = buildHtml({ issues, kpis: ctx.kpis, notes: ctx.notes, brief, history, date, durationSec, hasScreenshot: Boolean(ctx.screenshot) });
   const csv = buildCsv(issues);
   const subject = buildSubject(issues, date);
 
   const outDir = REPORTS_DIR;
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, 'report.html'), html);
+  // Saved copy points the inline image at the local file instead of the email attachment.
+  writeFileSync(path.join(outDir, 'report.html'), html.replace('cid:homepage-mobile', 'homepage-mobile.jpg'));
   writeFileSync(path.join(outDir, 'issues.csv'), csv);
   writeFileSync(path.join(outDir, 'report.json'), JSON.stringify({ date, kpis: ctx.kpis, notes: ctx.notes, issues }, null, 2));
   if (ctx.screenshot) writeFileSync(path.join(outDir, 'homepage-mobile.jpg'), ctx.screenshot);
@@ -88,7 +89,7 @@ async function main() {
     console.warn('\nEmail not configured (SMTP_HOST/SMTP_USER/SMTP_PASS/MAIL_TO). Report saved to reports/ only.');
   } else {
     const attachments = [{ filename: `aoun-issues-${date}.csv`, content: csv }];
-    if (ctx.screenshot) attachments.push({ filename: 'homepage-mobile.jpg', content: ctx.screenshot });
+    if (ctx.screenshot) attachments.push({ filename: 'homepage-mobile.jpg', content: ctx.screenshot, cid: 'homepage-mobile' });
     const sent = await sendReport({ subject, html, attachments });
     console.log(`\nEmail sent to ${sent.to.join(', ')}`);
   }

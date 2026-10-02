@@ -3,9 +3,9 @@ import { config } from './config.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const SEV = {
-  critical: { label: 'Fix today', color: '#b42318', bg: '#fef3f2' },
-  warning: { label: 'Fix this week', color: '#b54708', bg: '#fffaeb' },
-  info: { label: 'Clean-up', color: '#475467', bg: '#f2f4f7' },
+  critical: { label: 'Fix today', color: '#b42318', bg: '#fdeceb', hint: 'Losing money or customer trust right now' },
+  warning: { label: 'Fix this week', color: '#b7791f', bg: '#fdf4e3', hint: 'Hurting sales, SEO or speed' },
+  info: { label: 'Clean-up', color: '#6b665f', bg: '#f1eee9', hint: 'Housekeeping when there is time' },
 };
 
 function runUrl() {
@@ -18,27 +18,131 @@ function fixWorkflowUrl() {
   return s && r ? `${s}/${r}/actions/workflows/fix.yml` : null;
 }
 
-function kpiTable(k) {
-  const cells = [
-    ['Orders yesterday', k.ordersYesterday],
-    ['Sales yesterday', k.salesYesterday],
-    [`Cancel rate (${k.periodDays ?? 30}d)`, k.cancelRate],
-    [`Refund rate (${k.periodDays ?? 30}d)`, k.refundRate],
-    ['COD orders', k.codShare],
-    [`Not dispatched ${config.orders.stuckUnfulfilledDays}d+`, k.stuckOrders],
-    ['Live products', k.activeProducts],
-    ['Low stock', k.lowStockProducts],
-    ['Drafts', k.draftProducts],
-    ['Avg page load (mobile)', k.avgLoadSeconds != null ? `${k.avgLoadSeconds}s` : undefined],
-  ].filter(([, v]) => v !== undefined && v !== null);
+// ---------- design tokens (email-safe: tables + inline styles only) ----------
+const C = {
+  page: '#f4f1ec', card: '#ffffff', ink: '#141414', body: '#3d3d3d', muted: '#8a8580',
+  line: '#ebe6df', gold: '#b08d57', goldSoft: '#f7f1e7', black: '#111111',
+};
+const FONT = "'Helvetica Neue',Helvetica,Arial,sans-serif";
+const SERIF = "Georgia,'Times New Roman',serif";
 
+function prettyDate(iso) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+/** 0–100. Critical items weigh most; used only as a quick "how are we doing" signal. */
+export function healthScore(issues) {
+  // Smooth curve so the score never sits at 0 and visibly rises as issues get fixed.
+  const weight = { critical: 0.08, warning: 0.025, info: 0.008 };
+  const load = issues.reduce((s, i) => s + (weight[i.severity] || 0), 0);
+  return Math.round(100 * Math.exp(-load));
+}
+
+function scoreColor(n) {
+  if (n >= 80) return '#1f7a4d';
+  if (n >= 60) return '#b7791f';
+  return '#b42318';
+}
+
+const pill = (text, color, bg) =>
+  `<span style="display:inline-block;font:600 11px ${FONT};color:${color};background:${bg};padding:3px 9px;border-radius:999px;letter-spacing:.02em;white-space:nowrap;">${text}</span>`;
+
+function header(date, counts, score, newTotal) {
+  const sc = scoreColor(score);
+  return `
+<tr><td style="background:${C.black};padding:26px 28px 22px;border-radius:14px 14px 0 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td valign="middle">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td valign="middle" style="width:46px;height:46px;border:1.5px solid #ffffff;border-radius:50%;text-align:center;font:400 17px ${SERIF};color:#ffffff;letter-spacing:.04em;">AC</td>
+        <td valign="middle" style="padding-left:12px;">
+          <div style="font:600 13px ${FONT};color:#ffffff;letter-spacing:.28em;">AOUN COLLECTION</div>
+          <div style="font:400 12px ${FONT};color:#b9b4ad;letter-spacing:.06em;margin-top:3px;">Daily Store Report</div>
+        </td>
+      </tr></table>
+    </td>
+    <td valign="middle" align="right">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td align="center" style="width:74px;height:74px;border:3px solid ${sc};border-radius:50%;background:#1b1b1b;">
+          <div style="font:700 24px ${FONT};color:#ffffff;line-height:1;">${score}</div>
+          <div style="font:600 9px ${FONT};color:#b9b4ad;letter-spacing:.12em;margin-top:3px;">HEALTH</div>
+        </td>
+      </tr></table>
+    </td>
+  </tr></table>
+  <div style="height:1px;background:${C.gold};opacity:.6;margin:20px 0 16px;"></div>
+  <div style="font:400 26px ${SERIF};color:#ffffff;">${esc(prettyDate(date))}</div>
+  <div style="margin-top:12px;">
+    ${pill(`${counts.critical} fix today`, '#ffffff', '#b42318')}&nbsp;
+    ${pill(`${counts.warning} this week`, '#141414', '#f2c46d')}&nbsp;
+    ${pill(`${counts.info} clean-up`, '#141414', '#d9d4cc')}
+    ${newTotal ? `&nbsp;${pill(`${newTotal} new since yesterday`, '#ffffff', '#2f5bd3')}` : ''}
+  </div>
+</td></tr>`;
+}
+
+function sectionTitle(text, sub = '') {
+  return `<tr><td style="padding:30px 28px 10px;">
+  <div style="font:600 11px ${FONT};color:${C.gold};letter-spacing:.22em;">${esc(text.toUpperCase())}</div>
+  ${sub ? `<div style="font:400 13px ${FONT};color:${C.muted};margin-top:4px;">${sub}</div>` : ''}
+</td></tr>`;
+}
+
+function prioritiesCard(brief, issues) {
+  let body;
+  if (brief) {
+    body = `<div style="font:400 14px/1.65 ${FONT};color:${C.body};white-space:pre-line;">${esc(brief.text)}</div>`;
+  } else {
+    const top = issues.filter((i) => i.severity === 'critical').slice(0, 4);
+    const list = top.length ? top : issues.slice(0, 3);
+    body = list.length
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${list.map((i, n) => `
+<tr><td valign="top" style="width:26px;padding:6px 0;font:700 13px ${FONT};color:${C.gold};">${n + 1}.</td>
+<td style="padding:6px 0;font:400 14px/1.5 ${FONT};color:${C.ink};">${esc(i.title)} <span style="color:${C.muted};font-size:12px;">— ${esc(i.owner)}</span></td></tr>`).join('')}</table>`
+      : `<div style="font:400 14px ${FONT};color:#1f7a4d;">Nothing urgent today — the store looks healthy. 🎉</div>`;
+  }
+  return `<tr><td style="padding:22px 28px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.goldSoft};border-radius:12px;">
+<tr><td style="border-left:4px solid ${C.gold};border-radius:12px;padding:18px 20px;">
+  <div style="font:600 11px ${FONT};color:${C.gold};letter-spacing:.22em;margin-bottom:8px;">TODAY'S PRIORITIES</div>
+  ${body}
+</td></tr></table></td></tr>`;
+}
+
+function kpiGrid(k) {
+  const tiles = [
+    ['Orders yesterday', k.ordersYesterday, ''],
+    ['Sales yesterday', k.salesYesterday, ''],
+    ['Not dispatched', k.stuckOrders, `${config.orders.stuckUnfulfilledDays}+ days old`],
+    ['Cancel rate', k.cancelRate, `last ${k.periodDays ?? 30} days`],
+    ['Refund rate', k.refundRate, `last ${k.periodDays ?? 30} days`],
+    ['COD share', k.codShare, 'of orders'],
+    ['Live products', k.activeProducts, k.draftProducts != null ? `${k.draftProducts} drafts` : ''],
+    ['Low stock', k.lowStockProducts, `≤ ${config.catalogue.lowStockThreshold} pieces`],
+    ['Page load', k.avgLoadSeconds != null ? `${k.avgLoadSeconds}s` : undefined, 'mobile average'],
+  ].filter(([, v]) => v !== undefined && v !== null && v !== '');
+  if (!tiles.length) return '';
   const rows = [];
-  for (let i = 0; i < cells.length; i += 3) rows.push(cells.slice(i, i + 3));
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:6px;">
-${rows.map((r) => `<tr>${r.map(([l, v]) => `<td width="33%" style="background:#f9fafb;border:1px solid #eaecf0;border-radius:8px;padding:10px 12px;">
-<div style="font-size:11px;color:#667085;text-transform:uppercase;letter-spacing:.03em;">${esc(l)}</div>
-<div style="font-size:18px;font-weight:700;color:#101828;margin-top:2px;">${esc(v)}</div></td>`).join('')}</tr>`).join('\n')}
-</table>`;
+  for (let i = 0; i < tiles.length; i += 3) rows.push(tiles.slice(i, i + 3));
+  return `${sectionTitle('Business snapshot')}
+<tr><td style="padding:0 22px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:6px;">
+${rows.map((r) => `<tr>${r.map(([l, v, sub]) => `<td width="33%" valign="top" style="background:${C.card};border:1px solid ${C.line};border-radius:10px;padding:14px 14px 12px;">
+<div style="font:600 10px ${FONT};color:${C.muted};letter-spacing:.12em;">${esc(l.toUpperCase())}</div>
+<div style="font:700 21px ${FONT};color:${C.ink};margin-top:6px;">${esc(v)}</div>
+${sub ? `<div style="font:400 11px ${FONT};color:${C.muted};margin-top:3px;">${esc(sub)}</div>` : ''}
+</td>`).join('')}${r.length < 3 ? '<td width="33%"></td>'.repeat(3 - r.length) : ''}</tr>`).join('\n')}
+</table></td></tr>`;
+}
+
+function resolvedCard(resolved) {
+  if (!resolved?.length) return '';
+  return `<tr><td style="padding:16px 28px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#edf7f1;border-radius:12px;">
+<tr><td style="padding:14px 18px;font:400 13px/1.6 ${FONT};color:#1f5c3d;">
+<b style="letter-spacing:.04em;">✓ FIXED SINCE YESTERDAY</b><br>${resolved.map((r) => esc(r.title)).join('<br>')}
+</td></tr></table></td></tr>`;
 }
 
 function issueCard(iss, max) {
@@ -46,64 +150,111 @@ function issueCard(iss, max) {
   const shown = iss.items.slice(0, max);
   const more = iss.items.length - shown.length;
   const badge = iss.isNew
-    ? '<span style="background:#175cd3;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;margin-left:6px;">NEW</span>'
-    : iss.newCount ? `<span style="background:#d1e9ff;color:#175cd3;font-size:11px;padding:2px 6px;border-radius:4px;margin-left:6px;">+${iss.newCount} new</span>` : '';
+    ? pill('NEW', '#ffffff', '#2f5bd3')
+    : iss.newCount ? pill(`+${iss.newCount} new`, '#2f5bd3', '#e6edff') : '';
   const fixUrl = fixWorkflowUrl();
-  const auto = iss.autoFix
-    ? `<div style="margin-top:6px;font-size:12px;color:#344054;">⚙️ Auto-fix available: run <b>Fix store issues → ${esc(iss.autoFix)}</b>${fixUrl ? ` in <a href="${fixUrl}" style="color:#175cd3;">GitHub Actions</a>` : ''} (dry run first).</div>`
-    : '';
-  const list = shown.length ? `<ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#344054;">
-${shown.map((i) => `<li style="margin:2px 0;">${i.isNew && !iss.isNew ? '<b style="color:#175cd3;">[new]</b> ' : ''}${i.url ? `<a href="${esc(i.url)}" style="color:#175cd3;text-decoration:none;">${esc(i.label)}</a>` : esc(i.label)}${i.detail ? ` <span style="color:#667085;">— ${esc(i.detail)}</span>` : ''}</li>`).join('\n')}
-${more > 0 ? `<li style="color:#667085;">…and ${more} more (full list in the attached CSV)</li>` : ''}
-</ul>` : '';
 
-  return `<div style="border:1px solid #eaecf0;border-left:4px solid ${s.color};border-radius:8px;padding:12px 14px;margin:10px 0;background:#fff;">
-<div style="font-size:11px;color:${s.color};font-weight:700;text-transform:uppercase;">${esc(iss.area)} · ${esc(iss.owner)}</div>
-<div style="font-size:15px;font-weight:700;color:#101828;margin-top:2px;">${esc(iss.title)}${badge}</div>
-<div style="font-size:13px;color:#475467;margin-top:4px;"><b>Why it matters:</b> ${esc(iss.why)}</div>
-<div style="font-size:13px;color:#475467;margin-top:4px;"><b>How to fix:</b> ${esc(iss.fix)}</div>
-${auto}${list}
-</div>`;
+  const rows = shown.map((i, n) => `
+<tr><td style="padding:9px 0;border-top:${n ? `1px solid ${C.line}` : 'none'};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td valign="middle" style="font:600 13px ${FONT};color:${C.ink};word-break:break-word;">
+      ${i.isNew && !iss.isNew ? `<span style="color:#2f5bd3;font-size:10px;letter-spacing:.08em;">NEW&nbsp;</span>` : ''}${esc(i.label)}
+      ${i.detail ? `<div style="font:400 12px ${FONT};color:${C.muted};margin-top:2px;">${esc(i.detail)}</div>` : ''}
+    </td>
+    ${i.url ? `<td valign="middle" align="right" style="padding-left:10px;white-space:nowrap;"><a href="${esc(i.url)}" style="font:600 12px ${FONT};color:${C.ink};text-decoration:none;border:1px solid ${C.line};border-radius:999px;padding:5px 11px;display:inline-block;">Open&nbsp;›</a></td>` : ''}
+  </tr></table>
+</td></tr>`).join('');
+
+  const itemsBlock = shown.length ? `
+<tr><td style="padding:6px 20px 4px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}
+  ${more > 0 ? `<tr><td style="padding:8px 0 4px;border-top:1px solid ${C.line};font:400 12px ${FONT};color:${C.muted};">+ ${more} more in the attached spreadsheet</td></tr>` : ''}
+  </table>
+</td></tr>` : '';
+
+  const autoFix = iss.autoFix ? `
+<tr><td style="padding:6px 20px 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f5f3;border-radius:8px;"><tr>
+    <td style="padding:10px 12px;font:400 12px ${FONT};color:${C.body};">⚡ One-click fix available: <b>${esc(iss.autoFix)}</b> (preview first)</td>
+    ${fixUrl ? `<td align="right" style="padding:8px 10px;"><a href="${fixUrl}" style="font:600 12px ${FONT};color:#ffffff;background:${C.black};text-decoration:none;border-radius:999px;padding:7px 13px;display:inline-block;white-space:nowrap;">Run fix&nbsp;›</a></td>` : ''}
+  </tr></table>
+</td></tr>` : '';
+
+  return `<tr><td style="padding:0 28px 14px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.card};border:1px solid ${C.line};border-radius:12px;">
+<tr><td style="height:4px;background:${s.color};border-radius:12px 12px 0 0;font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td style="padding:16px 20px 4px;">
+  ${pill(esc(iss.area), s.color, s.bg)}&nbsp;${pill(esc(iss.owner), '#5b5650', '#f1eee9')}${badge ? `&nbsp;${badge}` : ''}
+  <div style="font:700 16px/1.4 ${FONT};color:${C.ink};margin-top:10px;">${esc(iss.title)}</div>
+</td></tr>
+<tr><td style="padding:8px 20px 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+    <tr><td valign="top" style="width:86px;padding:5px 8px 4px 0;font:600 10px ${FONT};color:${C.muted};letter-spacing:.08em;white-space:nowrap;">WHY</td>
+        <td style="padding:4px 0;font:400 13px/1.55 ${FONT};color:${C.body};">${esc(iss.why)}</td></tr>
+    <tr><td valign="top" style="width:86px;padding:5px 8px 4px 0;font:600 10px ${FONT};color:${C.muted};letter-spacing:.08em;white-space:nowrap;">HOW TO FIX</td>
+        <td style="padding:4px 0;font:400 13px/1.55 ${FONT};color:${C.ink};">${esc(iss.fix)}</td></tr>
+  </table>
+</td></tr>
+${autoFix}
+${itemsBlock}
+<tr><td style="height:12px;font-size:0;line-height:0;">&nbsp;</td></tr>
+</table></td></tr>`;
 }
 
-export function buildHtml({ issues, kpis, notes, brief, history, date, durationSec }) {
+function screenshotBlock(hasScreenshot) {
+  if (!hasScreenshot) return '';
+  return `${sectionTitle('Homepage this morning', 'How the site looked on a phone at the time of the check')}
+<tr><td align="center" style="padding:4px 28px 6px;">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="background:${C.black};border-radius:22px;"><tr>
+    <td style="padding:10px;"><img src="cid:homepage-mobile" width="240" alt="Homepage on mobile" style="display:block;width:240px;max-width:100%;border-radius:14px;border:0;"></td>
+  </tr></table>
+</td></tr>`;
+}
+
+export function buildHtml({ issues, kpis, notes, brief, history, date, durationSec, hasScreenshot = false }) {
   const max = config.report.maxItemsPerIssue;
   const counts = { critical: 0, warning: 0, info: 0 };
   issues.forEach((i) => { counts[i.severity]++; });
-
-  const sections = ['critical', 'warning', 'info']
-    .filter((sev) => counts[sev])
-    .map((sev) => `<h2 style="font-size:16px;color:${SEV[sev].color};margin:22px 0 4px;">${SEV[sev].label} (${counts[sev]})</h2>
-${issues.filter((i) => i.severity === sev).map((i) => issueCard(i, max)).join('\n')}`).join('\n');
-
-  const briefHtml = brief ? `<div style="background:#f0f9ff;border:1px solid #b9e6fe;border-radius:8px;padding:12px 14px;margin:14px 0;">
-<div style="font-size:12px;font-weight:700;color:#026aa2;text-transform:uppercase;">Today's priorities</div>
-<div style="font-size:14px;color:#0b4a6f;white-space:pre-line;margin-top:4px;">${esc(brief.text)}</div></div>` : '';
-
-  const resolved = history.resolved?.length ? `<div style="background:#ecfdf3;border:1px solid #abefc6;border-radius:8px;padding:10px 14px;margin:14px 0;font-size:13px;color:#067647;">
-✅ Fixed since last report: ${history.resolved.map((r) => esc(r.title)).join(' · ')}</div>` : '';
-
-  const notesHtml = notes.length ? `<div style="font-size:12px;color:#667085;margin-top:18px;">Notes: ${notes.map(esc).join(' · ')}</div>` : '';
+  const score = healthScore(issues);
+  const newTotal = issues.reduce((s, i) => s + (i.newCount || 0), 0);
   const run = runUrl();
 
-  return `<!doctype html><html><body style="margin:0;background:#f2f4f7;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
-<div style="max-width:680px;margin:0 auto;padding:18px;">
-<div style="background:#101828;color:#fff;border-radius:10px;padding:16px 18px;">
-<div style="font-size:12px;opacity:.75;">${esc(config.storeName)} · Daily store report</div>
-<div style="font-size:20px;font-weight:700;margin-top:2px;">${esc(date)}</div>
-<div style="font-size:13px;margin-top:6px;">
-<span style="color:#fda29b;">● ${counts.critical} fix today</span> &nbsp;
-<span style="color:#fec84b;">● ${counts.warning} this week</span> &nbsp;
-<span style="color:#d0d5dd;">● ${counts.info} clean-up</span></div></div>
-${briefHtml}
-${kpiTable(kpis)}
-${resolved}
-${issues.length ? sections : '<p style="font-size:15px;color:#067647;">No problems found today. 🎉</p>'}
-${notesHtml}
-<div style="font-size:12px;color:#98a2b3;margin-top:16px;border-top:1px solid #eaecf0;padding-top:10px;">
-Checked in ${durationSec}s${brief ? ` · AI brief by ${esc(brief.model)}` : ''}${run ? ` · <a href="${run}" style="color:#98a2b3;">run log</a>` : ''}.
-Reply to this email when you've fixed something so the team knows.</div>
-</div></body></html>`;
+  const preheader = counts.critical
+    ? `${counts.critical} things to fix today · ${counts.warning} this week · health ${score}/100`
+    : `Nothing urgent today · health ${score}/100`;
+
+  const sections = ['critical', 'warning', 'info'].filter((sev) => counts[sev]).map((sev) =>
+    `${sectionTitle(`${SEV[sev].label} · ${counts[sev]}`, SEV[sev].hint)}
+${issues.filter((i) => i.severity === sev).map((i) => issueCard(i, max)).join('\n')}`).join('\n');
+
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light only"><title>${esc(config.storeName)} · Daily Store Report</title></head>
+<body style="margin:0;padding:0;background:${C.page};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.page};"><tr><td align="center" style="padding:24px 10px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;background:#faf8f5;border-radius:14px;table-layout:fixed;">
+${header(date, counts, score, newTotal)}
+${prioritiesCard(brief, issues)}
+${resolvedCard(history.resolved)}
+${kpiGrid(kpis)}
+${issues.length ? sections : ''}
+${screenshotBlock(hasScreenshot)}
+${notes.length ? `<tr><td style="padding:18px 28px 0;font:400 12px/1.6 ${FONT};color:${C.muted};"><b>Notes:</b> ${notes.map(esc).join(' · ')}</td></tr>` : ''}
+<tr><td style="padding:26px 0 0;"></td></tr>
+<tr><td style="background:${C.black};padding:22px 28px;border-radius:0 0 14px 14px;">
+  <div style="font:400 15px ${SERIF};color:#ffffff;">Aoun Collection</div>
+  <div style="font:400 12px/1.7 ${FONT};color:#b9b4ad;margin-top:6px;">
+    Automatic check · every day at 10:00 AM (PKT) · took ${durationSec}s${brief ? ` · priorities by ${esc(brief.model)}` : ''}<br>
+    Full list of every item is in the attached spreadsheet.
+    ${run ? `<br><a href="${run}" style="color:${C.gold};text-decoration:none;">View run log ›</a>` : ''}
+    ${fixWorkflowUrl() ? `&nbsp;&nbsp;<a href="${fixWorkflowUrl()}" style="color:${C.gold};text-decoration:none;">Run a fix ›</a>` : ''}
+  </div>
+  <div style="font:400 11px ${FONT};color:#77726c;margin-top:12px;">Reply to this email when you have fixed something so the team knows.</div>
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
 }
 
 export function buildCsv(issues) {

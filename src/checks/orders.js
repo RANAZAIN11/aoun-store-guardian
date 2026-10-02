@@ -60,8 +60,9 @@ export async function runOrders(ctx) {
   ctx.kpis.codShare = orders.length ? pct(cod.length / orders.length) : '–';
 
   // Shopify only returns 60 days of orders unless the app has read_all_orders.
-  if (orders.length && dayOf(orders[0].createdAt) > since) {
-    ctx.notes.push(`Order history starts ${dayOf(orders[0].createdAt)} (asked for ${since}).`);
+  const oldest = orders.reduce((m, x) => (x.createdAt < m ? x.createdAt : m), orders[0]?.createdAt || '');
+  if (oldest && dayOf(oldest) > since && (Date.now() - new Date(oldest).getTime()) / 864e5 < o.lookbackDays - 3) {
+    ctx.notes.push(`Order history only goes back to ${dayOf(oldest)} — rates above cover a shorter period.`);
   }
 
   // 1. Orders stuck unfulfilled

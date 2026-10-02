@@ -66,7 +66,7 @@ export async function runCatalogue(ctx) {
   if (negative.length) {
     issues.push(issue({
       id: 'negative-stock', area: 'Inventory', severity: 'critical', owner: 'Inventory team',
-      title: `${negative.length} live sizes have negative stock (sold more than you have)`,
+      title: `${negative.length} live ${negative.length === 1 ? 'size has' : 'sizes have'} negative stock (sold more than you have)`,
       why: 'Orders were taken for pieces that do not exist — these become cancellations and angry customers.',
       fix: 'Recount these sizes and correct stock. If a design is not made-to-order, untick "Continue selling when out of stock".',
       items: negative,
