@@ -20,20 +20,3 @@ export async function tagsRemove(id, tags) {
     mutation Remove($id: ID!, $tags: [String!]!) { tagsRemove(id: $id, tags: $tags) { userErrors { field message } } }`, { id, tags });
   assertNoUserErrors(d.tagsRemove, 'tagsRemove');
 }
-
-/** Sets alt text on product images. Tries fileUpdate first, falls back to productUpdateMedia on older setups. */
-export async function setImageAlt(productId, mediaId, alt) {
-  try {
-    const d = await gql(`
-      mutation Alt($files: [FileUpdateInput!]!) { fileUpdate(files: $files) { files { id } userErrors { field message } } }`,
-    { files: [{ id: mediaId, alt }] });
-    assertNoUserErrors(d.fileUpdate, 'fileUpdate');
-  } catch (err) {
-    const d = await gql(`
-      mutation Media($productId: ID!, $media: [UpdateMediaInput!]!) {
-        productUpdateMedia(productId: $productId, media: $media) { media { id } mediaUserErrors { field message } }
-      }`, { productId, media: [{ id: mediaId, alt }] }).catch(() => { throw err; });
-    const errs = d.productUpdateMedia?.mediaUserErrors || [];
-    if (errs.length) throw new Error(errs.map((e) => e.message).join('; '));
-  }
-}

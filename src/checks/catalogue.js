@@ -4,7 +4,7 @@ import { issue, item } from '../lib/issues.js';
 import {
   loadAllProductsLight, loadProductsDetailed, isActive, ageDays, isCodeOnlyTitle,
   productTags, productAttributes, chartSizesFromHtml, offeredSizes, handleProblem,
-  normalizeProductType, canonicalTag, productCode, buildSeo, cleanHandle,
+  isWrongTag, correctTag, productCode, buildSeo, cleanHandle,
 } from '../lib/products.js';
 
 const cat = config.catalogue;
@@ -22,23 +22,7 @@ export async function runCatalogue(ctx) {
   ctx.kpis.draftProducts = drafts.length;
   ctx.kpis.totalProducts = all.length;
 
-  // 1. Supplier names in the Vendor field (public on products.json, Google data, vendor pages)
-  const allowed = new Set(config.brand.allowedVendors.map((v) => v.toLowerCase()));
-  const badVendor = active.filter((p) => !allowed.has(String(p.vendor || '').toLowerCase()));
-  if (badVendor.length) {
-    const byVendor = {};
-    badVendor.forEach((p) => { byVendor[p.vendor] = (byVendor[p.vendor] || 0) + 1; });
-    issues.push(issue({
-      id: 'supplier-vendor', area: 'Catalogue', severity: 'critical', owner: 'Store team',
-      title: `${badVendor.length} live products show a supplier name as the brand`,
-      why: `Vendor is public (products.json, Google Shopping data, vendor filter pages). Currently: ${Object.entries(byVendor).map(([v, n]) => `${v} (${n})`).join(', ')}.`,
-      fix: `Set Vendor to "${config.brand.vendor}". Keep supplier names in a private place (product metafield or tags in Odoo), not Vendor.`,
-      autoFix: 'vendor',
-      items: badVendor.map((p) => pItem(p, `Vendor shows "${p.vendor}"`, `Change Vendor from "${p.vendor}" to "${config.brand.vendor}"`)),
-    }));
-  }
-
-  // 2. Missing images / zero prices / broken sale prices
+  // 1. Missing images / zero prices / broken sale prices
   const noImage = active.filter((p) => !(p.media?.nodes || []).some((m) => m.mediaContentType === 'IMAGE'));
   const zeroPrice = active.filter((p) => (p.variants?.nodes || []).some((v) => !Number(v.price)));
   const badCompare = active.filter((p) => (p.variants?.nodes || []).some(
@@ -59,7 +43,7 @@ export async function runCatalogue(ctx) {
     }));
   }
 
-  // 3. Negative stock (overselling)
+  // 2. Negative stock (overselling)
   const negative = active.flatMap((p) => (p.variants?.nodes || [])
     .filter((v) => Number(v.inventoryQuantity) < 0)
     .map((v) => item(v.id, `${productCode(p)} – size ${v.title}`, { url: adminProductUrl(p.id), detail: `Stock is ${v.inventoryQuantity}${v.inventoryPolicy === 'CONTINUE' ? ' · "Continue selling when out of stock" is ON' : ''}`, fix: `Count size ${v.title} and set the real quantity${v.inventoryPolicy === 'CONTINUE' ? '; untick "Continue selling when out of stock"' : ''}`, where: `Product → Variants → ${v.title} → Inventory` })));
@@ -73,7 +57,7 @@ export async function runCatalogue(ctx) {
     }));
   }
 
-  // 4. Low stock (info for buying team)
+  // 3. Low stock (info for buying team)
   const low = active.filter((p) => Number(p.totalInventory) > 0 && Number(p.totalInventory) <= cat.lowStockThreshold);
   ctx.kpis.lowStockProducts = low.length;
   if (low.length) {
@@ -86,7 +70,7 @@ export async function runCatalogue(ctx) {
     }));
   }
 
-  // 5. Size chart does not cover every size on sale
+  // 4. Size chart does not cover every size on sale
   const sizeIssues = [];
   for (const p of active) {
     const chart = chartSizesFromHtml(p.descriptionHtml);
@@ -105,7 +89,7 @@ export async function runCatalogue(ctx) {
     }));
   }
 
-  // 6. Product titles are only codes (SEO)
+  // 5. Product titles are only codes (SEO)
   const codeTitles = active.filter((p) => isCodeOnlyTitle(p.title));
   const noSeoTitle = codeTitles.filter((p) => !p.seo?.title);
   if (noSeoTitle.length) {
@@ -119,7 +103,7 @@ export async function runCatalogue(ctx) {
     }));
   }
 
-  // 7. Meta descriptions missing or auto-generated from the details table
+  // 6. Meta descriptions missing or auto-generated from the details table
   const weakMeta = active.filter((p) => {
     const d = (p.seo?.description || '').trim();
     return !d || /^product details/i.test(d);
@@ -135,24 +119,11 @@ export async function runCatalogue(ctx) {
     }));
   }
 
-  // 8. Image alt text
-  const altItems = [];
+  // 7. WhatsApp-quality photos
   let whatsappImages = 0;
   for (const p of active) {
     const imgs = (p.media?.nodes || []).filter((m) => m.mediaContentType === 'IMAGE');
-    const bad = imgs.filter((m) => !m.alt || m.alt.trim() === '' || m.alt.trim().toLowerCase() === p.title.trim().toLowerCase());
-    if (bad.length) { const seo = buildSeo(p); altItems.push(pItem(p, `${bad.length} of ${imgs.length} images have ${bad.every((m) => !m.alt) ? 'no' : bad.every((m) => m.alt) ? 'only the code as' : 'missing or code-only'} alt text (image ${bad.map((m) => imgs.indexOf(m) + 1).join(', ')})`, `Set alt text like: "${seo ? `${seo.name} ${seo.attrs.code}` : productCode(p)} – front"`, 'Product → Media → click image → Add alt text')); }
     whatsappImages += imgs.filter((m) => /whatsapp|-wa\d+/i.test(m.image?.url || '')).length;
-  }
-  if (altItems.length) {
-    issues.push(issue({
-      id: 'missing-alt', area: 'SEO', severity: 'warning', owner: 'Developer',
-      title: `${altItems.length} live products have images without descriptive alt text`,
-      why: 'Alt text helps Google Images and screen readers. Right now it is empty or just the code.',
-      fix: 'Run the "alt-text" fix (uses the same product details as the SEO fix).',
-      autoFix: 'alt-text',
-      items: altItems,
-    }));
   }
   if (whatsappImages) {
     issues.push(issue({
@@ -164,7 +135,7 @@ export async function runCatalogue(ctx) {
     }));
   }
 
-  // 9. Duplicate / typo handles
+  // 8. Duplicate / typo handles
   const handleItems = active
     .map((p) => ({ p, problem: handleProblem(p.handle) }))
     .filter((x) => x.problem)
@@ -181,7 +152,7 @@ export async function runCatalogue(ctx) {
     }));
   }
 
-  // 10. Duplicate titles among live products
+  // 9. Duplicate titles among live products
   const titleCount = {};
   active.forEach((p) => { titleCount[p.title] = (titleCount[p.title] || 0) + 1; });
   const dupTitles = active.filter((p) => titleCount[p.title] > 1);
@@ -195,29 +166,14 @@ export async function runCatalogue(ctx) {
     }));
   }
 
-  // 11. Product types inconsistent
-  const typeItems = active
-    .filter((p) => normalizeProductType(p.productType) !== p.productType || !cat.allowedProductTypes.includes(p.productType))
-    .map((p) => pItem(p, `Type is "${p.productType || '(empty)'}"`, cat.allowedProductTypes.includes(normalizeProductType(p.productType)) ? `Change Type to "${normalizeProductType(p.productType)}"` : `Choose one of: ${cat.allowedProductTypes.join(', ')}`, 'Product → Product organization → Type'));
-  if (typeItems.length) {
-    issues.push(issue({
-      id: 'product-types', area: 'Catalogue', severity: 'info', owner: 'Developer',
-      title: `${typeItems.length} live products use a non-standard product type`,
-      why: `Mixed spellings ("2 PC", "3Pc", "Stitched / Clothing / 1Pc") break filters and reports. Standard list: ${cat.allowedProductTypes.join(', ')}.`,
-      fix: 'Run the "types-tags" fix.',
-      autoFix: 'types-tags',
-      items: typeItems,
-    }));
-  }
-
-  // 12. Tag spelling inconsistencies + stale "New Arrival"
+  // 10. Tag spelling inconsistencies + stale "New Arrival"
   const tagItems = [];
   const staleNew = [];
   const newTags = cat.newArrivalTags.map((t) => t.toLowerCase());
   for (const p of active) {
     const tags = productTags(p);
-    const wrong = tags.filter((t) => canonicalTag(t) !== t);
-    if (wrong.length) tagItems.push(pItem(p, `Tag${wrong.length > 1 ? 's' : ''} spelled: ${wrong.map((t) => `"${t}"`).join(', ')}`, wrong.map((t) => `Replace "${t}" with "${canonicalTag(t)}"`).join('; '), 'Product → Product organization → Tags'));
+    const wrong = tags.filter(isWrongTag);
+    if (wrong.length) tagItems.push(pItem(p, `Wrong tag${wrong.length > 1 ? 's' : ''}: ${wrong.map((t) => `"${t}"`).join(', ')}`, wrong.map((t) => `Replace "${t}" with "${correctTag(t)}"`).join('; '), 'Product → Product organization → Tags'));
     if (tags.some((t) => newTags.includes(t.toLowerCase())) && ageDays(p.createdAt) > cat.newArrivalMaxAgeDays) {
       staleNew.push(pItem(p, `Added ${Math.round(ageDays(p.createdAt))} days ago, still tagged "${tags.find((t) => newTags.includes(t.toLowerCase()))}"`, `Remove the "${tags.find((t) => newTags.includes(t.toLowerCase()))}" tag`, 'Product → Product organization → Tags'));
     }
@@ -225,10 +181,10 @@ export async function runCatalogue(ctx) {
   if (tagItems.length) {
     issues.push(issue({
       id: 'tag-spelling', area: 'Catalogue', severity: 'info', owner: 'Developer',
-      title: `${tagItems.length} live products use inconsistent tag spellings`,
-      why: 'Collections and filters built on tags miss products tagged "New Arrivals" vs "New Arrival", "winter" vs "Winter", etc.',
-      fix: 'Run the "types-tags" fix (it skips any tag a smart collection depends on, so nothing disappears from the site).',
-      autoFix: 'types-tags',
+      title: `${tagItems.length} live products have a wrong tag`,
+      why: 'A misspelt or wrong tag (e.g. "New Arrivals" instead of "New Arrival", or a typo) keeps the product out of the collection and filter that should show it. Capital vs small letters are ignored — Shopify treats those as the same tag.',
+      fix: 'Run the "tags" fix (it skips any tag a smart collection depends on, so nothing disappears from the site).',
+      autoFix: 'tags',
       items: tagItems,
     }));
   }
@@ -237,13 +193,13 @@ export async function runCatalogue(ctx) {
       id: 'stale-new-arrivals', area: 'Merchandising', severity: 'warning', owner: 'Store team',
       title: `${staleNew.length} products are still tagged New Arrival after ${cat.newArrivalMaxAgeDays}+ days`,
       why: 'Old designs in "New Arrivals" make the store look like nothing new is coming in.',
-      fix: 'Run the "types-tags" fix with "expire new arrivals" ticked, or remove the tag manually.',
-      autoFix: 'types-tags',
+      fix: 'Run the "tags" fix with "expire new arrivals" ticked, or remove the tag manually.',
+      autoFix: 'tags',
       items: staleNew,
     }));
   }
 
-  // 13. Season contradictions (tags vs product details)
+  // 11. Season contradictions (tags vs product details)
   const season = currentSeason();
   const seasonItems = [];
   for (const p of active) {
@@ -268,7 +224,7 @@ export async function runCatalogue(ctx) {
   ctx.kpis.liveProductsInSeason = active.filter((p) => productTags(p).some((t) => seasonWords(season).includes(t.toLowerCase()))).length;
   ctx.kpis.liveProductsOffSeason = active.filter((p) => productTags(p).some((t) => seasonWords(oppositeSeason(season)).includes(t.toLowerCase()))).length;
 
-  // 14. Test products & draft clutter
+  // 12. Test products & draft clutter
   const tests = all.filter((p) => /\btest\b/i.test(p.title));
   const oldDrafts = drafts.filter((p) => ageDays(p.createdAt) > cat.oldDraftDays);
   const clutter = [

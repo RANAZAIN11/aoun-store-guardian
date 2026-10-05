@@ -2,26 +2,44 @@
   "storeName": "Aoun Collection",
   "siteUrl": "https://www.aouncollection.com",
   "timezone": "Asia/Karachi",
-
-  "brand": {
-    "vendor": "Aoun Collection",
-    "allowedVendors": ["Aoun Collection"]
-  },
-
   "season": {
     "mode": "auto",
-    "winterMonths": [10, 11, 12, 1, 2],
-    "summerWords": ["summer"],
-    "winterWords": ["winter"]
+    "winterMonths": [
+      10,
+      11,
+      12,
+      1,
+      2
+    ],
+    "summerWords": [
+      "summer"
+    ],
+    "winterWords": [
+      "winter"
+    ]
   },
-
   "frontend": {
     "pages": [
-      { "label": "Homepage", "path": "/" },
-      { "label": "New Arrivals", "path": "/collections/new-arrival" },
-      { "label": "Sale", "path": "/collections/sale-2" },
-      { "label": "About Us", "path": "/pages/about-us" },
-      { "label": "Cart", "path": "/cart" }
+      {
+        "label": "Homepage",
+        "path": "/"
+      },
+      {
+        "label": "New Arrivals",
+        "path": "/collections/new-arrival"
+      },
+      {
+        "label": "Sale",
+        "path": "/collections/sale-2"
+      },
+      {
+        "label": "About Us",
+        "path": "/pages/about-us"
+      },
+      {
+        "label": "Cart",
+        "path": "/cart"
+      }
     ],
     "sampleProducts": 4,
     "timeoutMs": 45000,
@@ -35,7 +53,11 @@
       "Real people making great products",
       "Discover our curated collection of timeless designs"
     ],
-    "typoPhrases": ["the Pakistan's", "across the Pakistan", "Clearace"],
+    "typoPhrases": [
+      "the Pakistan's",
+      "across the Pakistan",
+      "Clearace"
+    ],
     "ignoreRequestHosts": [
       "google-analytics.com",
       "googletagmanager.com",
@@ -51,28 +73,18 @@
       "instagram": "aouncollectionofficial"
     }
   },
-
   "catalogue": {
     "codeOnlyTitlePattern": "^\\s*AC[\\s-]?\\d+([\\s-]+[A-Za-z0-9]+){0,3}\\s*$",
     "codePattern": "AC[\\s-]?(\\d{3,6})",
     "lowStockThreshold": 2,
     "oldDraftDays": 180,
-    "newArrivalTags": ["New Arrival", "New Arrivals"],
-    "newArrivalMaxAgeDays": 45,
-    "allowedProductTypes": ["1 Pc", "2 Pc", "3 Pc", "Shawls", "Kids", "Unstitched"],
-    "productTypeMap": [
-      { "pattern": "(^|[^\\d])1\\s*-?\\s*pc", "to": "1 Pc" },
-      { "pattern": "(^|[^\\d])2\\s*-?\\s*pc", "to": "2 Pc" },
-      { "pattern": "(^|[^\\d])3\\s*-?\\s*pc", "to": "3 Pc" }
+    "newArrivalTags": [
+      "New Arrival",
+      "New Arrivals"
     ],
+    "newArrivalMaxAgeDays": 45,
     "tagMap": {
-      "New Arrivals": "New Arrival",
-      "summer": "Summer",
-      "winter": "Winter",
-      "1pc": "1Pc",
-      "2PC": "2Pc",
-      "3pc": "3Pc",
-      "Luxury pret": "Luxury Pret"
+      "New Arrivals": "New Arrival"
     },
     "knownTypos": {
       "gary": "gray"
@@ -91,29 +103,46 @@
       "2xl": "XXL"
     }
   },
-
   "seo": {
     "metafieldHints": {
-      "color": ["color_type", "colour", "color"],
-      "fabric": ["shirt_fabric", "fabric"],
-      "technique": ["work_technique", "technique", "work"],
-      "pieces": ["number_of_pieces", "pieces"],
-      "season": ["season"]
+      "color": [
+        "color_type",
+        "colour",
+        "color"
+      ],
+      "fabric": [
+        "shirt_fabric",
+        "fabric"
+      ],
+      "technique": [
+        "work_technique",
+        "technique",
+        "work"
+      ],
+      "pieces": [
+        "number_of_pieces",
+        "pieces"
+      ],
+      "season": [
+        "season"
+      ]
     },
-    "nounByPieces": { "1": "", "2": "Suit", "3": "Suit" },
+    "nounByPieces": {
+      "1": "",
+      "2": "Suit",
+      "3": "Suit"
+    },
     "titleTemplate": "{name} | {code}",
     "maxTitleLength": 70,
     "metaTemplate": "Shop {code} – {name} by {store}. Ready to wear, delivered across Pakistan.",
     "maxMetaLength": 160
   },
-
   "orders": {
     "lookbackDays": 30,
     "stuckUnfulfilledDays": 5,
     "cancelRateWarn": 0.1,
     "refundRateWarn": 0.1
   },
-
   "report": {
     "maxItemsPerIssue": 15,
     "aiLanguage": "simple English",

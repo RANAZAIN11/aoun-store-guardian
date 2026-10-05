@@ -7,15 +7,6 @@ const PRODUCT = 'Shopify admin → Products → open the product';
 const THEME = 'Shopify admin → Online Store → Themes → Customize';
 
 export const PLAYBOOK = {
-  'supplier-vendor': {
-    where: `${PRODUCT} → right side "Product organization" → Vendor`,
-    steps: [
-      'Click "Open" next to the product below.',
-      'In the right-side box "Product organization", find "Vendor".',
-      'Replace the supplier name with "Aoun Collection" and click Save.',
-      'Faster: run the one-click "vendor" fix — it does all of them at once.',
-    ],
-  },
   'product-basics': {
     where: `${PRODUCT} → Media / Pricing section`,
     steps: [
@@ -76,14 +67,6 @@ export const PLAYBOOK = {
       'Click Save.',
     ],
   },
-  'missing-alt': {
-    where: `${PRODUCT} → Media → click an image → "Add alt text"`,
-    steps: [
-      'Easiest: run the one-click "alt-text" fix.',
-      'Manual: open the product → click an image in Media → "Add alt text".',
-      'Describe it, e.g. "Black embroidered dhanak 2-piece suit AC7764 – front", then Save.',
-    ],
-  },
   'whatsapp-images': {
     where: `${PRODUCT} → Media`,
     steps: [
@@ -108,17 +91,10 @@ export const PLAYBOOK = {
       'If they are different colours: add the colour to the title or SEO title so they are different.',
     ],
   },
-  'product-types': {
-    where: `${PRODUCT} → "Product organization" → Type`,
-    steps: [
-      'Easiest: run the one-click "types-tags" fix.',
-      'Manual: open the product → Product organization → Type → choose the standard type shown below → Save.',
-    ],
-  },
   'tag-spelling': {
     where: `${PRODUCT} → "Product organization" → Tags`,
     steps: [
-      'Easiest: run the one-click "types-tags" fix (it never breaks a collection).',
+      'Easiest: run the one-click "tags" fix (it never breaks a collection).',
       'Manual: open the product → Tags → remove the wrong spelling → add the correct one shown below → Save.',
     ],
   },
@@ -126,7 +102,7 @@ export const PLAYBOOK = {
     where: `${PRODUCT} → "Product organization" → Tags`,
     steps: [
       'Open the product → Tags → remove "New Arrival" / "New Arrivals" → Save.',
-      'Or run the "types-tags" fix with "expire new arrivals" ticked to do all of them.',
+      'Or run the "tags" fix with "expire new arrivals" ticked to do all of them.',
     ],
   },
   'season-mismatch': {
@@ -205,14 +181,6 @@ export const PLAYBOOK = {
       'Open the theme editor on the Home page.',
       'In each extra video/reel block, turn OFF "Autoplay" (keep only 2–3 playing).',
       'Save.',
-    ],
-  },
-  'video-links': {
-    where: `${THEME} → Home page → shop-the-reel / video section → each reel block`,
-    steps: [
-      'Open the theme editor on the Home page and click the reels section.',
-      'Click each reel block listed below → in "Product" (or "Link"), choose the actual product instead of the video file.',
-      'Save, then tap "View Product" on your phone to test.',
     ],
   },
   'placeholder-text': {

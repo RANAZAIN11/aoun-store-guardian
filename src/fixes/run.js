@@ -4,13 +4,11 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { REPORTS_DIR } from '../lib/config.js';
 import { getAccess, missingScopes, shopifyConfigured, shopDomain, adminProductUrl } from '../lib/shopify.js';
 import { loadAllProductsLight, loadProductsDetailed } from '../lib/products.js';
-import vendor from './vendor.js';
 import seo from './seo.js';
-import altText from './alt-text.js';
-import typesTags from './types-tags.js';
+import tags from './tags.js';
 import handles from './handles.js';
 
-const FIXES = { vendor, seo, 'alt-text': altText, 'types-tags': typesTags, handles };
+const FIXES = { seo, tags, handles };
 
 function usage() {
   console.log(`Usage: node src/fixes/run.js <fix> [--apply] [--all-statuses] [--limit=N] [--expire-new-arrivals]

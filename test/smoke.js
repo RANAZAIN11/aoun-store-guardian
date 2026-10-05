@@ -54,11 +54,11 @@ try {
   const rep = JSON.parse(readFileSync(path.join(reportsDir, 'report.json'), 'utf8'));
   const ids = new Set(rep.issues.map((i) => i.id));
   const expected = [
-    'supplier-vendor', 'product-basics', 'negative-stock', 'low-stock', 'size-chart-gap', 'code-only-titles',
-    'weak-meta', 'missing-alt', 'whatsapp-images', 'bad-handles', 'duplicate-titles', 'product-types',
+    'product-basics', 'negative-stock', 'low-stock', 'size-chart-gap', 'code-only-titles',
+    'weak-meta', 'whatsapp-images', 'bad-handles', 'duplicate-titles',
     'tag-spelling', 'stale-new-arrivals', 'season-mismatch', 'store-clutter',
     'stuck-orders', 'cancel-rate', 'refund-rate',
-    'broken-images', 'js-errors', 'autoplay-videos', 'video-links', 'placeholder-text', 'typos',
+    'broken-images', 'js-errors', 'autoplay-videos', 'placeholder-text', 'typos',
     'fake-viewer-counter', 'footer-duplicates', 'social-links', 'og-image-http',
   ];
   // off-season-banner only fires in winter months, so it is checked separately below.
@@ -67,10 +67,19 @@ try {
   if ([10, 11, 12, 1, 2].includes(month)) check('detects off-season-banner', () => assert.ok(ids.has('off-season-banner')));
   check('size chart gap reported once (catalogue), not twice', () => assert.ok(ids.has('size-chart-gap') && !ids.has('size-chart-gap-live')));
   check('no check crashed', () => assert.ok(![...ids].some((i) => i.endsWith('-check-failed')), [...ids].join(',')));
-  check('vendor issue lists the two supplier products', () => assert.equal(rep.issues.find((i) => i.id === 'supplier-vendor').items.length, 2));
+  for (const gone of ['supplier-vendor', 'missing-alt', 'video-links', 'product-types']) {
+    check(`no longer reports ${gone}`, () => assert.ok(!ids.has(gone)));
+  }
+  check('tags: only really wrong tags flagged (case differences ignored)', () => {
+    const t = rep.issues.find((i) => i.id === 'tag-spelling');
+    const flagged = t.items.map((x) => x.detail).join(' | ');
+    assert.ok(flagged.includes('"New Arrivals"') && flagged.includes('"Gary"'), flagged);
+    assert.ok(!/"3pc"|"2PC"|"winter"/.test(flagged), flagged);
+    assert.equal(t.items.length, 2, flagged);
+  });
   check('KPIs filled', () => assert.ok(rep.kpis.ordersPeriod === 40 && rep.kpis.activeProducts === 4 && rep.kpis.cancelRate));
   const html = readFileSync(path.join(reportsDir, 'report.html'), 'utf8');
-  check('HTML report has sections + KPIs', () => assert.ok(html.includes('FIX TODAY') && html.includes('ORDERS YESTERDAY') && html.includes('HEALTH')));
+  check('HTML report has sections + KPIs', () => assert.ok(html.includes('Fix today') && html.includes('Orders yesterday') && html.includes('Store health') && html.includes('At a glance')));
   check('every issue has a WHERE and numbered steps', () => {
     const missing = rep.issues.filter((i) => !i.where || !(i.steps || []).length).map((i) => i.id);
     assert.deepEqual(missing, []);
@@ -80,7 +89,7 @@ try {
     assert.deepEqual(bad, []);
   });
   check('SEO item suggests the exact title', () => assert.ok(rep.issues.find((i) => i.id === 'code-only-titles').items.some((x) => x.fix.includes('Black Embroidered Dhanak 2-Piece Suit | AC7764'))));
-  check('downloadable HTML is self-contained (screenshot embedded)', () => assert.ok(html.includes('data:image/jpeg;base64,') && html.includes('FLAGGED') && html.includes('HOW TO FIX')));
+  check('downloadable HTML is self-contained (screenshot embedded)', () => assert.ok(html.includes('data:image/jpeg;base64,') && html.includes('Flagged') && html.includes('How to fix') && html.includes('Find it:')));
   check('CSV written', () => assert.ok(readFileSync(path.join(reportsDir, 'issues.csv'), 'utf8').split('\n').length > 20));
 
   console.log('\n2) Daily report (second run → nothing should be "new")');
@@ -89,20 +98,13 @@ try {
   check('history: no new items on identical second run', () => assert.equal(rep2.issues.reduce((s, i) => s + i.newCount, 0), 0));
 
   console.log('\n3) Fixes — dry run must not change anything');
-  for (const fix of ['vendor', 'seo', 'alt-text', 'types-tags', 'handles']) {
+  for (const fix of ['seo', 'tags', 'handles']) {
     const r = await run(['src/fixes/run.js', fix], env);
     check(`${fix} dry run ok`, () => assert.equal(r.code, 0, r.out));
   }
   check('dry runs sent zero mutations', () => assert.equal(shop.mutations.length, 0));
 
   console.log('\n4) Fixes — apply');
-  await run(['src/fixes/run.js', 'vendor', '--apply'], env);
-  check('vendor: 2 productUpdate calls with brand vendor', () => {
-    const m = shop.mutations.filter((x) => x.name === 'productUpdate' && x.variables.product.vendor);
-    assert.equal(m.length, 2);
-    assert.ok(m.every((x) => x.variables.product.vendor === 'Aoun Collection'));
-  });
-
   const before = shop.mutations.length;
   const h = await run(['src/fixes/run.js', 'handles', '--apply'], env);
   const hm = shop.mutations.slice(before);
@@ -120,19 +122,16 @@ try {
   });
 
   const b3 = shop.mutations.length;
-  await run(['src/fixes/run.js', 'types-tags', '--apply'], env);
+  await run(['src/fixes/run.js', 'tags', '--apply'], env);
   const tm = shop.mutations.slice(b3);
-  check('types-tags: product type normalised', () => assert.ok(tm.some((x) => x.variables.product?.productType === '3 Pc')));
-  check('types-tags: "New Arrivals" NOT renamed (drives a smart collection)', () => assert.ok(!tm.some((x) => x.name === 'tagsRemove' && x.variables.tags.includes('New Arrivals'))));
-  check('types-tags: "winter" renamed to "Winter"', () => assert.ok(tm.some((x) => x.name === 'tagsAdd' && x.variables.tags.includes('Winter'))));
-
-  const b4 = shop.mutations.length;
-  await run(['src/fixes/run.js', 'alt-text', '--apply'], env);
-  check('alt-text: 3 images updated', () => assert.equal(shop.mutations.slice(b4).filter((x) => x.name === 'fileUpdate').length, 3));
+  check('tags: product types never touched', () => assert.ok(!tm.some((x) => x.variables.product?.productType)));
+  check('tags: "New Arrivals" NOT renamed (drives a smart collection)', () => assert.ok(!tm.some((x) => x.name === 'tagsRemove' && x.variables.tags.includes('New Arrivals'))));
+  check('tags: case-only tags left alone', () => assert.ok(!tm.some((x) => x.variables.tags?.some((t) => ['3pc', '2PC', 'winter', '3Pc', '2Pc'].includes(t)))));
+  check('tags: typo "Gary" corrected to "gray"', () => assert.ok(tm.some((x) => x.name === 'tagsAdd' && x.variables.tags.includes('gray'))));
 } finally {
   shop.server.close();
   site.server.close();
-  rmSync(reportsDir, { recursive: true, force: true });
+  if (!process.env.KEEP_REPORTS) rmSync(reportsDir, { recursive: true, force: true });
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll smoke checks passed ✅');

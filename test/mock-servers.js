@@ -1,6 +1,6 @@
 /**
  * Local stand-ins for the Shopify Admin API and the storefront, seeded with the same kinds of
- * problems found on the live store (supplier vendors, copy handles, XL missing from size chart, …).
+ * problems found on the live store (copy handles, XL missing from size chart, …).
  * Used only by `npm run test:smoke` — never touches the real store.
  */
 import http from 'node:http';
@@ -15,7 +15,7 @@ export function fixtures(siteUrl) {
   const active = [
     {
       id: gid('Product', 1), title: 'AC7764', handle: 'ac7764-2pc-black', status: 'ACTIVE', vendor: 'MIRZA TRADERS',
-      productType: '2 Pc', tags: ['Winter', 'New Arrival', '2PC'], createdAt: daysAgo(2), totalInventory: 9,
+      productType: '2 Pc', tags: ['Winter', 'New Arrival', '2PC', '3pc'], createdAt: daysAgo(2), totalInventory: 9,
       descriptionHtml: chart, seo: { title: null, description: null },
       options: [{ name: 'Sizes', optionValues: ['Small', 'Medium', 'Large', 'Extra Large'].map((name) => ({ name })) }],
       media: { nodes: [
@@ -48,7 +48,7 @@ export function fixtures(siteUrl) {
     },
     {
       id: gid('Product', 4), title: 'AC7719', handle: 'ac7719-2pc-gray', status: 'ACTIVE', vendor: 'Aoun Collection',
-      productType: '2 Pc', tags: ['Winter'], createdAt: daysAgo(11), totalInventory: 6,
+      productType: 'Clothing', tags: ['Winter', 'Gary'], createdAt: daysAgo(11), totalInventory: 6,
       descriptionHtml: '', seo: { title: 'Gray Embroidered Linen 2-Piece Suit | AC7719', description: 'Good description' },
       options: [{ name: 'Size', optionValues: [{ name: 'Small' }] }],
       media: { nodes: [{ id: gid('MediaImage', 41), alt: 'Gray suit front', mediaContentType: 'IMAGE', image: { url: 'https://cdn.shopify.com/s/files/gray.jpg' } }] },

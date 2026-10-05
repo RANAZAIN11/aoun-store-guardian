@@ -11,10 +11,8 @@ on:
         required: true
         type: choice
         options:
-          - vendor
           - seo
-          - alt-text
-          - types-tags
+          - tags
           - handles
       apply:
         description: "Apply changes to the live store (leave OFF to preview only)"
@@ -25,7 +23,7 @@ on:
         type: boolean
         default: false
       expire_new_arrivals:
-        description: "types-tags only: remove 'New Arrival' from products older than the new-arrival window"
+        description: "tags only: remove 'New Arrival' from products older than the new-arrival window"
         type: boolean
         default: false
       limit:

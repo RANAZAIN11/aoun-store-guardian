@@ -8,8 +8,8 @@ It runs free on GitHub Actions. Nobody's computer needs to be on.
 
 | Area | Examples |
 |---|---|
-| **Storefront** (real mobile browser) | Pages down, broken images, JS errors, slow/heavy pages, too many autoplay videos, reel "View Product" links that open an .mp4, leftover theme demo text, typos, off-season announcement bar, fake "12 people are viewing" counter, size chart missing XL, duplicate footer links, wrong Instagram link, http share image |
-| **Catalogue** (Shopify Admin API) | Supplier names in Vendor, missing images, price 0, fake discounts, negative stock (overselling), low stock, size chart vs sizes on sale, code-only titles ("AC7764"), missing Google descriptions, missing image alt text, WhatsApp-quality photos, `-copy` / `-1` / typo URLs, duplicate titles, messy product types and tags, stale "New Arrival" tags, Summer/Winter mix-ups, test products, draft clutter |
+| **Storefront** (real mobile browser) | Pages down, broken images, JS errors, slow/heavy pages, too many autoplay videos, leftover theme demo text, typos, off-season announcement bar, fake "12 people are viewing" counter, size chart missing XL, duplicate footer links, wrong Instagram link, http share image |
+| **Catalogue** (Shopify Admin API) | Missing images, price 0, fake discounts, negative stock (overselling), low stock, size chart vs sizes on sale, code-only titles ("AC7764"), missing Google descriptions, WhatsApp-quality photos, `-copy` / `-1` / typo URLs, duplicate titles, wrong tags (typos and real misspellings, not capital vs small letters), stale "New Arrival" tags, Summer/Winter mix-ups, test products, draft clutter |
 | **Orders** | Orders not dispatched after 5+ days, cancellation rate, refund/return rate, COD share, cancellations by city, yesterday's orders and sales |
 
 Each issue is labelled:
@@ -25,10 +25,8 @@ Some catalogue problems can be fixed in bulk from the **Actions → Fix store is
 
 | Fix | What it does |
 |---|---|
-| `vendor` | Sets Vendor to "Aoun Collection" wherever it shows a supplier name |
 | `seo` | Writes a Google title and description from the product details, e.g. **"Black Embroidered Dhanak 2-Piece Suit \| AC7764"**. The product title (the code) is **not** changed, so staff, Odoo and order slips work as before. |
-| `alt-text` | Gives every image a description, e.g. "Black Embroidered Dhanak 2-Piece Suit AC7764 – front" |
-| `types-tags` | Standardises "2 PC / 3Pc / Stitched / Clothing / 1Pc" into 1 Pc / 2 Pc / 3 Pc, fixes tag spellings, and can optionally expire old "New Arrival" tags |
+| `tags` | Corrects wrong tags (e.g. "New Arrivals" → "New Arrival", typos like "gary" → "gray"). Leaves capital/small-letter differences and product types alone. Can optionally expire old "New Arrival" tags |
 | `handles` | Renames `ac5533-copy-2` / `ac7354-3pc-blue-1` / `…-gary` URLs to clean ones **with automatic redirects**, so old Instagram and WhatsApp links keep working |
 
 Safety rules:
@@ -47,7 +45,6 @@ These live in the **theme code**, not in product data, so they need a theme edit
 - The demo text blocks on product pages.
 - The footer link names.
 - The `og:image` http prefix.
-- Reel product links.
 - The announcement bar.
 
 The report says exactly where each one is.
@@ -137,11 +134,11 @@ From then on it runs **every day at 10 AM** automatically.
 
 Everything is in one file. You don't need to touch the code.
 
-- **`brand.allowedVendors`**: vendor names that are OK to show publicly.
 - **`season.winterMonths`**: which months count as winter. Used for the announcement-bar and season checks.
 - **`frontend.pages`**: which pages to open every morning.
 - **`frontend.placeholderPhrases`**, **`frontend.typoPhrases`**: text that should never appear on the site.
-- **`catalogue.productTypeMap`**, **`catalogue.tagMap`**, **`catalogue.knownTypos`**: the spelling standards.
+- **`catalogue.tagMap`**: tags that are wrong and what they should be, e.g. `"New Arrivals": "New Arrival"`. Capital vs small letters never count as wrong.
+- **`catalogue.knownTypos`**: misspelt words to catch in tags and URLs, e.g. `"gary": "gray"`.
 - **`catalogue.newArrivalMaxAgeDays`**: how long a product counts as "new" (default 45).
 - **`orders.stuckUnfulfilledDays`**, **`orders.cancelRateWarn`**, **`orders.refundRateWarn`**: the order alert thresholds.
 - **`seo.titleTemplate`**, **`seo.metaTemplate`**: the format of the generated Google titles and descriptions.
@@ -155,8 +152,8 @@ npx playwright install chromium
 copy .env.example .env      (then fill it in)
 npm run report:local        (writes reports/report.html, no email)
 npm run report              (sends the email)
-npm run fix -- vendor       (preview a fix)
-npm run fix -- vendor --apply --limit=5
+npm run fix -- tags         (preview a fix)
+npm run fix -- tags --apply --limit=5
 npm run test:smoke          (tests everything against a fake store; never touches the real one)
 ```
 

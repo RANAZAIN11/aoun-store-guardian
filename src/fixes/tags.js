@@ -1,17 +1,18 @@
 import { config } from '../lib/config.js';
 import {
-  normalizeProductType, canonicalTag, productTags, productCode, ageDays, loadCollectionTagRules,
+  isWrongTag, correctTag, productTags, productCode, ageDays, loadCollectionTagRules,
 } from '../lib/products.js';
-import { productUpdate, tagsAdd, tagsRemove } from './mutations.js';
+import { tagsAdd, tagsRemove } from './mutations.js';
 
 /**
- * Standardises product types and tag spellings.
- * Safety: a tag that a smart collection depends on is never renamed/removed unless the new tag is
- * also used by that collection — so nothing silently disappears from a collection page.
+ * Corrects wrong tags (catalogue.tagMap renames + catalogue.knownTypos). Capital vs small letters
+ * are left alone — Shopify treats "3pc" and "3Pc" as the same tag. Product types are never touched.
+ * Safety: a tag that a smart collection depends on is never renamed unless the new tag is also
+ * used by that collection — so nothing silently disappears from a collection page.
  * --expire-new-arrivals removes "New Arrival(s)" from products older than catalogue.newArrivalMaxAgeDays.
  */
 export default {
-  description: 'Standardise product types + tag spellings (optional: expire old "New Arrival" tags)',
+  description: 'Correct wrong tags (optional: expire old "New Arrival" tags)',
   scopes: ['write_products'],
   detailed: false,
 
@@ -23,14 +24,10 @@ export default {
 
     for (const p of products) {
       const base = { productId: p.id, code: productCode(p), handle: p.handle };
-
-      const type = normalizeProductType(p.productType);
-      if (type && type !== p.productType) changes.push({ ...base, field: 'product type', from: p.productType, to: type, kind: 'type' });
-
       const tags = productTags(p);
-      for (const t of tags) {
-        const to = canonicalTag(t);
-        if (to === t) continue;
+
+      for (const t of tags.filter(isWrongTag)) {
+        const to = correctTag(t);
         const cols = usedBy(t).filter((c) => !usedBy(to).includes(c));
         changes.push({
           ...base, field: 'tag', from: t, to, kind: 'rename',
@@ -48,7 +45,6 @@ export default {
   },
 
   async apply(c) {
-    if (c.kind === 'type') return productUpdate({ id: c.productId, productType: c.to });
     if (c.kind === 'rename') {
       await tagsAdd(c.productId, [c.to]);
       return tagsRemove(c.productId, [c.from]);

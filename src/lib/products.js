@@ -228,24 +228,27 @@ export function handleProblem(handle) {
   return null;
 }
 
-// ---------- product types & tags ----------
+// ---------- tags ----------
 
-export function normalizeProductType(type) {
-  const t = String(type || '').trim();
-  if (cat.allowedProductTypes.includes(t)) return t;
-  for (const rule of cat.productTypeMap) {
-    if (new RegExp(rule.pattern, 'i').test(t)) return rule.to;
-  }
-  return t;
-}
-
-export function canonicalTag(tag) {
+/**
+ * The correct spelling of a tag, using catalogue.tagMap (real renames such as "New Arrivals" → "New Arrival")
+ * and catalogue.knownTypos (e.g. "gary" → "gray"). Lookup ignores capital/small letters.
+ */
+export function correctTag(tag) {
+  const t = String(tag || '').trim();
   const map = cat.tagMap || {};
-  if (map[tag]) return map[tag];
-  const key = Object.keys(map).find((k) => k.toLowerCase() === tag.toLowerCase() && map[k] !== tag);
-  // Only rewrite when the case-insensitive match is not already the canonical spelling.
-  if (key && map[key] !== tag) return map[key];
-  return tag;
+  const key = Object.keys(map).find((k) => k.toLowerCase() === t.toLowerCase());
+  let out = key ? map[key] : t;
+  for (const [bad, good] of Object.entries(cat.knownTypos || {})) {
+    out = out.replace(new RegExp(`\\b${bad}\\b`, 'gi'), good);
+  }
+  return out;
 }
+
+/**
+ * True only when a tag is actually wrong. Capital vs small letters ("3pc" / "3Pc") is NOT wrong —
+ * Shopify tags, collections and filters treat them as the same tag.
+ */
+export const isWrongTag = (tag) => correctTag(tag).toLowerCase() !== String(tag || '').trim().toLowerCase();
 
 export const productTags = (p) => (Array.isArray(p.tags) ? p.tags : String(p.tags || '').split(',')).map((t) => t.trim()).filter(Boolean);

@@ -28,9 +28,6 @@ function collectPageFacts() {
     .filter((i) => i.currentSrc && !i.currentSrc.startsWith('data:') && i.complete && i.naturalWidth === 0)
     .map((i) => i.currentSrc);
   const autoplay = [...document.querySelectorAll('video')].filter((v) => v.autoplay || v.hasAttribute('autoplay')).length;
-  const videoLinks = [...document.querySelectorAll('a[href]')]
-    .filter((a) => /\.(mp4|mov|webm|m3u8)(\?|$)/i.test(a.getAttribute('href')))
-    .map((a) => ({ text: a.innerText.trim() || a.getAttribute('aria-label') || '(no text)', href: a.href }));
 
   const ann = document.querySelector('announcement-bar, .announcement-bar, [class*="announcement"], [id*="announcement"]');
   const announcement = ann ? ann.innerText.replace(/\s+/g, ' ').trim().slice(0, 400) : '';
@@ -73,7 +70,6 @@ function collectPageFacts() {
     text,
     brokenImages: [...new Set(imgs)],
     autoplay,
-    videoLinks,
     announcement,
     footerLinks,
     ogImage: og ? og.getAttribute('content') : null,
@@ -230,19 +226,7 @@ export async function runFrontend(ctx) {
     }));
   }
 
-  // 6. "View Product" links that open a raw video file
-  const videoLinks = ok.flatMap((r) => r.facts.videoLinks.map((l, n) => item(l.href, `${r.label} – reel ${n + 1} "${l.text}" button`, { url: r.url, detail: `Opens video file: …/${l.href.split('/').pop().split('?')[0].slice(0, 60)}`, fix: `In reel block ${n + 1}, pick the product shown in this video as the link`, where: 'Theme editor → Home page → reels section' })));
-  if (videoLinks.length) {
-    issues.push(issue({
-      id: 'video-links', area: 'Storefront', severity: 'warning', owner: 'Content team',
-      title: `${videoLinks.length} shop-the-reel ${videoLinks.length === 1 ? 'link opens' : 'links open'} a video file instead of a product`,
-      why: 'A customer tapping "View Product" lands on a bare .mp4 with no way to buy.',
-      fix: 'In the theme editor, open the reels section and select the product for each reel.',
-      items: videoLinks,
-    }));
-  }
-
-  // 7. Template placeholder text
+  // 6. Template placeholder text
   const placeholders = ok.flatMap((r) => fe.placeholderPhrases
     .filter((ph) => r.facts.text.toLowerCase().includes(ph.toLowerCase()))
     .map((ph) => item(`${r.product ? 'product-template' : r.url}|${ph}`, r.product ? 'Every product page' : r.label, { url: r.url, detail: `Demo text showing: "${ph}"`, fix: `Replace "${ph}" with real Aoun text, or hide that block`, where: r.product ? 'Theme editor → Products → Default product' : `Theme editor → ${r.label}` })));
@@ -257,7 +241,7 @@ export async function runFrontend(ctx) {
     }));
   }
 
-  // 8. Typos
+  // 7. Typos
   const TYPO_FIX = { "the pakistan's": "Pakistan's", 'across the pakistan': 'across Pakistan', clearace: 'Clearance' };
   const typos = ok.flatMap((r) => fe.typoPhrases
     .filter((t) => `${r.facts.text} ${r.facts.metaDescription}`.toLowerCase().includes(t.toLowerCase()))
@@ -281,7 +265,7 @@ export async function runFrontend(ctx) {
     }));
   }
 
-  // 9. Off-season messaging in the announcement bar
+  // 8. Off-season messaging in the announcement bar
   const season = currentSeason();
   const wrongWords = seasonWords(oppositeSeason(season));
   const offSeason = ok.find((r) => r.facts.announcement && wrongWords.some((w) => r.facts.announcement.toLowerCase().includes(w)));
@@ -295,7 +279,7 @@ export async function runFrontend(ctx) {
     }));
   }
 
-  // 10. Fake "people viewing" counter
+  // 9. Fake "people viewing" counter
   const productPages = ok.filter((r) => r.product && r.facts.viewers);
   const viewerValues = [...new Set(productPages.map((r) => r.facts.viewers))];
   if (productPages.length >= 2 && viewerValues.length === 1) {
@@ -308,7 +292,7 @@ export async function runFrontend(ctx) {
     }));
   }
 
-  // 11. Size chart vs sizes on sale (as the customer sees it)
+  // 10. Size chart vs sizes on sale (as the customer sees it)
   const sizeGaps = [];
   for (const r of ok.filter((x) => x.product)) {
     const offered = r.facts.sizes.map(normalizeSize);
@@ -329,7 +313,7 @@ export async function runFrontend(ctx) {
     }));
   }
 
-  // 12. Footer: same label pointing to different pages
+  // 11. Footer: same label pointing to different pages
   const home = ok.find((r) => r.label === 'Homepage');
   if (home) {
     const byLabel = {};
@@ -345,7 +329,7 @@ export async function runFrontend(ctx) {
       }));
     }
 
-    // 13. Social links
+    // 12. Social links
     const want = fe.expectedSocial?.instagram;
     const ig = home.facts.footerLinks.find((l) => /instagram\.com/i.test(l.href));
     if (want && ig && !ig.href.toLowerCase().includes(`instagram.com/${want.toLowerCase()}`)) {
@@ -358,7 +342,7 @@ export async function runFrontend(ctx) {
       }));
     }
 
-    // 14. og:image over http
+    // 13. og:image over http
     if (home.facts.ogImage && home.facts.ogImage.startsWith('http:')) {
       issues.push(issue({
         id: 'og-image-http', area: 'SEO', severity: 'info', owner: 'Developer',
