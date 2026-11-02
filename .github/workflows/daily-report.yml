@@ -21,7 +21,7 @@ jobs:
   # On scheduled (backup) runs, skip if a report already ran or is running
   # today (Pakistan date). Manual / API-triggered runs always go ahead.
   gate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       go: ${{ steps.check.outputs.go }}
     steps:
@@ -41,7 +41,7 @@ jobs:
   report:
     needs: gate
     if: needs.gate.outputs.go == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
 
       # Restores yesterday's results so the email can mark what is NEW today.
       - name: Restore report history
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: reports/history
           key: report-history-${{ github.run_id }}
